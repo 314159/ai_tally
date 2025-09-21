@@ -9,7 +9,6 @@
 
 // Forward-declare Metal types for macOS
 #if defined(__APPLE__)
-typedef void* id; // C++ compatible forward declaration for Objective-C objects
 #endif
 
 namespace atem {

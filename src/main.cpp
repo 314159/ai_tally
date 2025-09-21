@@ -49,6 +49,8 @@ int main(int argc, char* argv[])
             "ATEM switcher IP address")(
             "mock-inputs", po::value<uint16_t>(&config.mock_inputs),
             "Number of inputs to show in mock mode");
+        bool no_gui = false;
+        desc.add_options()("no-gui", po::bool_switch(&no_gui), "Disable the GUI (useful for headless/server runs)");
 
         po::variables_map vm;
         po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
@@ -59,6 +61,8 @@ int main(int argc, char* argv[])
                       << desc << "\n";
             return 0;
         }
+
+        bool enable_gui = !no_gui;
 
         const auto address = boost::asio::ip::make_address(config.ws_address);
         const unsigned short port = config.ws_port;
@@ -95,15 +99,22 @@ int main(int argc, char* argv[])
         // Create server
         server = std::make_unique<atem::HttpAndWebSocketServer>(io_context, address, port, config, *monitor);
 
-        // Create GUI
-        gui = std::make_unique<atem::GuiManager>();
-        if (!gui->init()) {
-            std::cerr << "Failed to initialize GUI\n";
-            return 1;
+        // Create GUI (optional)
+        if (enable_gui) {
+            gui = std::make_unique<atem::GuiManager>();
+            if (!gui->init()) {
+                std::cerr << "Failed to initialize GUI\n";
+                return 1;
+            }
+        } else {
+            std::cout << "GUI disabled (--no-gui); running headless server.\n";
         }
 
         // Connect tally updates to websocket broadcasts and GUI
         monitor->on_tally_change([&](const atem::TallyUpdate& update) {
+            std::ostringstream oss;
+            oss << "[main] tally callback on thread " << std::this_thread::get_id() << " for input " << update.input_id << "\n";
+            std::cout << oss.str();
             if (server)
                 server->broadcast_tally_update(update);
             if (gui)
@@ -114,22 +125,29 @@ int main(int argc, char* argv[])
         server->start();
         monitor->start();
 
-        // Run the IO context in a separate thread
-        std::thread server_thread([&io_context]() {
-            try {
-                io_context.run();
-            } catch (const std::exception& e) {
-                std::cerr << "Server thread error: " << e.what() << std::endl;
+        std::thread server_thread;
+        if (enable_gui) {
+            // Run the IO context in a separate thread while GUI runs on main
+            server_thread = std::thread([&io_context]() {
+                try {
+                    io_context.run();
+                } catch (const std::exception& e) {
+                    std::cerr << "Server thread error: " << e.what() << std::endl;
+                }
+            });
+
+            // Run the GUI loop on the main thread
+            gui->run_loop();
+
+            // Clean up
+            io_context.stop();
+            if (server_thread.joinable()) {
+                server_thread.join();
             }
-        });
-
-        // Run the GUI loop on the main thread
-        gui->run_loop();
-
-        // Clean up
-        io_context.stop();
-        if (server_thread.joinable()) {
-            server_thread.join();
+        } else {
+            // No GUI: run the IO context on the main thread so the process stays alive
+            io_context.run();
+            // io_context.run() returned -> shutdown initiated
         }
 
         std::cout << "Application stopped.\n";

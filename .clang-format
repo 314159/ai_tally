@@ -1,0 +1,9 @@
+# Based on LLVM, but with Allman style braces
+BasedOnStyle: WebKit
+Language: Cpp
+
+# Other common settings
+AllowShortFunctionsOnASingleLine: None
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never

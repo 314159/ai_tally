@@ -1,0 +1,479 @@
+#include "websocket_server.h"
+#include "config.h"
+#include "tally_monitor.h"
+#include <algorithm>
+#include <boost/json.hpp>
+#include <iostream>
+
+namespace atem {
+namespace {
+    // Generates an HTML page listing all tally inputs based on config
+    std::string generate_index_page(uint16_t num_inputs)
+    {
+        std::string html = R"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ATEM Tally - Input Selection</title>
+    <style>
+        body { font-family: sans-serif; background-color: #2c3e50; color: #ecf0f1; text-align: center; padding-top: 50px; }
+        h1 { color: #3498db; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; max-width: 800px; margin: 50px auto; }
+        a { display: block; padding: 40px 20px; background-color: #34495e; color: #ecf0f1; text-decoration: none; font-size: 1.5em; border-radius: 8px; transition: background-color 0.3s; }
+        a:hover { background-color: #46627f; }
+    </style>
+</head>
+<body>
+    <h1>Select an Input for Tally View</h1>
+    <div class="grid">
+)";
+        for (uint16_t i = 1; i <= num_inputs; ++i) {
+            html += "<a href=\"/tally/" + std::to_string(i) + "\">Input " + std::to_string(i) + "</a>\n";
+        }
+        html += R"(
+    </div>
+</body>
+</html>
+)";
+        return html;
+    }
+
+    // Generates a full-screen tally client page for a specific input
+    std::string generate_tally_page(int input_id)
+    {
+        return R"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tally - Input )"
+            + std::to_string(input_id) + R"(</title>
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: sans-serif; }
+        body { transition: background-color 0.3s ease; display: flex; justify-content: center; align-items: center; }
+        .off { background-color: #000000; }
+        .preview { background-color: #00FF00; }
+        .program { background-color: #FF0000; }
+        .input-number {
+            font-size: 50vmin;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.5);
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="off">
+    <div class="input-number">)"
+            + std::to_string(input_id) + R"(</div>
+    <script>
+    const inputId = )"
+            + std::to_string(input_id) + R"(;
+    let ws;
+
+    function connect() {
+        const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+        ws = new WebSocket(url);
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'tally_update' && data.input === inputId) {
+                if (data.program) {
+                    document.body.className = 'program';
+                } else if (data.preview) {
+                    document.body.className = 'preview';
+                } else {
+                    document.body.className = 'off';
+                }
+            }
+        };
+
+        ws.onclose = () => {
+            document.body.className = 'off';
+            setTimeout(connect, 1000); // Try to reconnect after 1 second
+        };
+
+        ws.onerror = () => {
+            ws.close();
+        };
+    }
+
+    connect();
+</script>
+</body>
+</html>
+)";
+    }
+} // namespace
+
+// HttpAndWebSocketSession implementation
+HttpAndWebSocketSession::HttpAndWebSocketSession(tcp::socket&& socket, const Config& config, TallyMonitor& monitor)
+    : ws_(std::move(socket))
+    , config_(config)
+    , monitor_(monitor)
+{
+}
+
+HttpAndWebSocketSession::~HttpAndWebSocketSession()
+{
+    std::cout << "WebSocket session destroyed\n";
+}
+
+void HttpAndWebSocketSession::run()
+{
+    // We need to be executing within a strand to perform async operations
+    // on the I/O objects in this session. Although not strictly necessary
+    // for single-threaded contexts, this example code is written to be
+    // thread-safe by default.
+    net::dispatch(ws_.get_executor(), beast::bind_front_handler(&HttpAndWebSocketSession::do_http_read, shared_from_this()));
+}
+
+void HttpAndWebSocketSession::send(std::string message)
+{
+    // Post the work to the strand to ensure thread safety
+    net::post(
+        ws_.get_executor(),
+        beast::bind_front_handler(
+            &HttpAndWebSocketSession::on_send,
+            shared_from_this(),
+            std::move(message)));
+}
+
+void HttpAndWebSocketSession::on_send(std::string message)
+{
+    // Add the message to the queue
+    queue_.push_back(std::make_shared<const std::string>(std::move(message)));
+
+    // If there's only one message in the queue, start writing
+    if (queue_.size() > 1)
+        return;
+
+    ws_.async_write(
+        net::buffer(*queue_.front()),
+        beast::bind_front_handler(
+            &HttpAndWebSocketSession::on_write,
+            shared_from_this()));
+}
+
+void HttpAndWebSocketSession::on_write(beast::error_code ec, std::size_t /*bytes_transferred*/)
+{
+    // Remove the message from the queue
+    queue_.pop_front();
+
+    if (ec)
+        return; // Handle error
+
+    // If there are more messages, send the next one
+    if (!queue_.empty()) {
+        ws_.async_write(
+            net::buffer(*queue_.front()),
+            beast::bind_front_handler(
+                &HttpAndWebSocketSession::on_write,
+                shared_from_this()));
+    }
+}
+
+void HttpAndWebSocketSession::close()
+{
+    ws_.async_close(websocket::close_code::normal,
+        [self = shared_from_this()](beast::error_code ec) {
+            if (ec) {
+                std::cerr << "WebSocket close error: " << ec.message() << "\n";
+            }
+        });
+}
+
+void HttpAndWebSocketSession::on_ws_accept(beast::error_code ec)
+{
+    if (ec) {
+        std::cerr << "WebSocket accept error: " << ec.message() << "\n";
+        return;
+    }
+
+    std::cout << "WebSocket connection accepted\n";
+
+    // Send initial tally state
+    boost::json::object welcome_msg;
+    welcome_msg["type"] = "welcome";
+    welcome_msg["message"] = "Connected to ATEM Tally Server";
+
+    send(boost::json::serialize(boost::json::value_from(welcome_msg)));
+
+    // Send the current state of all tally inputs
+    for (const auto& state : monitor_.get_all_tally_states()) {
+        TallyUpdate update = state.to_update(monitor_.is_mock_mode());
+        send(boost::json::serialize(boost::json::value_from(update)));
+    }
+
+    // Read a message
+    do_read();
+}
+
+void HttpAndWebSocketSession::do_read()
+{
+    // Read a message into our buffer
+    ws_.async_read(
+        buffer_,
+        beast::bind_front_handler(
+            &HttpAndWebSocketSession::on_read,
+            shared_from_this()));
+}
+
+void HttpAndWebSocketSession::on_read(beast::error_code ec, std::size_t bytes_transferred)
+{
+    boost::ignore_unused(bytes_transferred);
+
+    // This indicates that the session was closed
+    if (ec == websocket::error::closed)
+        return;
+
+    if (ec) {
+        std::cerr << "WebSocket read error: " << ec.message() << "\n";
+        return;
+    }
+
+    // Echo the message back (for ping/pong or client commands)
+    ws_.text(ws_.got_text());
+
+    // Clear the buffer
+    buffer_.consume(buffer_.size());
+
+    // Read another message
+    do_read();
+}
+
+void HttpAndWebSocketSession::do_http_read()
+{
+    http_parser_.emplace();
+    http_parser_->body_limit(10000);
+    beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(30));
+
+    http::async_read(beast::get_lowest_layer(ws_), buffer_, *http_parser_,
+        beast::bind_front_handler(&HttpAndWebSocketSession::on_http_read, shared_from_this()));
+}
+
+void HttpAndWebSocketSession::on_http_read(beast::error_code ec, std::size_t bytes_transferred)
+{
+    boost::ignore_unused(bytes_transferred);
+
+    if (ec == http::error::end_of_stream) {
+        beast::get_lowest_layer(ws_).close();
+        return;
+    }
+    if (ec) {
+        std::cerr << "HTTP read error: " << ec.message() << "\n";
+        return;
+    }
+
+    // See if it is a WebSocket Upgrade
+    if (websocket::is_upgrade(http_parser_->get())) {
+        // Set suggested timeout settings for the websocket
+        // We disable the timeout because we are a push-only server
+        // and don't want idle connections to be closed.
+        beast::get_lowest_layer(ws_).expires_never();
+
+        ws_.set_option(websocket::stream_base::timeout::suggested(beast::role_type::server));
+
+        // Set a decorator to change the Server of the handshake
+        ws_.set_option(websocket::stream_base::decorator([](websocket::response_type& res) {
+            res.set(http::field::server, "ATEM-Tally-Server");
+        }));
+
+        // Accept the websocket handshake
+        ws_.async_accept(http_parser_->get(),
+            beast::bind_front_handler(&HttpAndWebSocketSession::on_ws_accept, shared_from_this()));
+        return;
+    }
+
+    handle_http_request(http_parser_->release());
+}
+
+void HttpAndWebSocketSession::handle_http_request(http::request<http::string_body>&& req)
+{
+    auto const bad_request = [&req](beast::string_view why) {
+        http::response<http::string_body> res { http::status::bad_request, req.version() };
+        res.set(http::field::server, "ATEM-Tally-Server");
+        res.set(http::field::content_type, "text/html");
+        res.keep_alive(req.keep_alive());
+        res.body() = std::string(why);
+        res.prepare_payload();
+        return res;
+    };
+
+    auto const not_found = [&req](beast::string_view target) {
+        http::response<http::string_body> res { http::status::not_found, req.version() };
+        res.set(http::field::server, "ATEM-Tally-Server");
+        res.set(http::field::content_type, "text/html");
+        res.keep_alive(req.keep_alive());
+        res.body() = "The resource '" + std::string(target) + "' was not found.";
+        res.prepare_payload();
+        return res;
+    };
+
+    if (req.method() != http::verb::get) {
+        auto res = bad_request("Unknown HTTP-method");
+        auto sp = std::make_shared<http::response<http::string_body>>(std::move(res));
+        return http::async_write(beast::get_lowest_layer(ws_), *sp,
+            [self = shared_from_this(), sp](beast::error_code, std::size_t) { });
+    }
+
+    http::response<http::string_body> res { http::status::ok, req.version() };
+    res.set(http::field::server, "ATEM-Tally-Server");
+    res.set(http::field::content_type, "text/html");
+
+    if (req.target() == "/") {
+        // In a real app, you'd get the number of inputs from the ATEM
+        res.body() = generate_index_page(config_.mock_inputs);
+    } else if (req.target().starts_with("/tally/")) {
+        try {
+            std::string id_str = std::string(req.target().substr(7));
+            int id = std::stoi(id_str);
+            res.body() = generate_tally_page(id);
+        } catch (const std::exception&) {
+            auto res = bad_request("Invalid tally ID");
+            auto sp = std::make_shared<http::response<http::string_body>>(std::move(res));
+            return http::async_write(beast::get_lowest_layer(ws_), *sp,
+                [self = shared_from_this(), sp](beast::error_code, std::size_t) { });
+        }
+    } else {
+        auto res = not_found(req.target());
+        auto sp = std::make_shared<http::response<http::string_body>>(std::move(res));
+        return http::async_write(beast::get_lowest_layer(ws_), *sp,
+            [self = shared_from_this(), sp](beast::error_code, std::size_t) { });
+    }
+
+    res.keep_alive(req.keep_alive());
+    res.prepare_payload();
+
+    auto sp = std::make_shared<http::response<http::string_body>>(std::move(res));
+    http::async_write(beast::get_lowest_layer(ws_), *sp,
+        [self = shared_from_this(), sp](beast::error_code ec, std::size_t) {
+            if (ec)
+                std::cerr << "HTTP write error: " << ec.message() << "\n";
+        });
+}
+
+// WebSocketServer implementation
+HttpAndWebSocketServer::HttpAndWebSocketServer(net::io_context& ioc, tcp::endpoint endpoint, const Config& config, TallyMonitor& monitor)
+    : ioc_(ioc)
+    , acceptor_(ioc)
+    , config_(config)
+    , monitor_(monitor)
+{
+    beast::error_code ec;
+
+    // Open the acceptor
+    acceptor_.open(endpoint.protocol(), ec);
+    if (ec) {
+        throw std::runtime_error("Failed to open acceptor: " + ec.message());
+    }
+
+    // Allow address reuse
+    acceptor_.set_option(net::socket_base::reuse_address(true), ec);
+    if (ec) {
+        throw std::runtime_error("Failed to set reuse_address: " + ec.message());
+    }
+
+    // Bind to the server address
+    acceptor_.bind(endpoint, ec);
+    if (ec) {
+        throw std::runtime_error("Failed to bind acceptor: " + ec.message());
+    }
+
+    // Start listening for connections
+    acceptor_.listen(net::socket_base::max_listen_connections, ec);
+    if (ec) {
+        throw std::runtime_error("Failed to listen: " + ec.message());
+    }
+}
+
+HttpAndWebSocketServer::HttpAndWebSocketServer(net::io_context& ioc, net::ip::address address, unsigned short port, const Config& config, TallyMonitor& monitor)
+    : HttpAndWebSocketServer(ioc, tcp::endpoint { address, port }, config, monitor)
+{
+}
+
+HttpAndWebSocketServer::~HttpAndWebSocketServer()
+{
+    stop();
+}
+
+void HttpAndWebSocketServer::start()
+{
+    if (running_)
+        return;
+
+    running_ = true;
+    do_accept();
+}
+
+void HttpAndWebSocketServer::stop()
+{
+    if (!running_)
+        return;
+
+    running_ = false;
+
+    beast::error_code ec;
+    acceptor_.close(ec);
+
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    for (auto& session : sessions_) {
+        session->close();
+    }
+    sessions_.clear();
+}
+
+void HttpAndWebSocketServer::broadcast_tally_update(const TallyUpdate& update)
+{
+    std::string message = boost::json::serialize(boost::json::value_from(update));
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    for (auto& session : sessions_) {
+        session->send(message);
+    }
+}
+
+void HttpAndWebSocketServer::do_accept()
+{
+    if (!running_)
+        return;
+
+    // Accept incoming connection
+    acceptor_.async_accept(
+        net::make_strand(ioc_),
+        beast::bind_front_handler(
+            &HttpAndWebSocketServer::on_accept,
+            this));
+}
+
+void HttpAndWebSocketServer::on_accept(beast::error_code ec, tcp::socket socket)
+{
+    if (ec) {
+        std::cerr << "Accept error: " << ec.message() << "\n";
+    } else {
+        // Create the session and run it
+        auto session = std::make_shared<HttpAndWebSocketSession>(std::move(socket), config_, monitor_);
+
+        {
+            std::lock_guard<std::mutex> lock(sessions_mutex_);
+            sessions_.push_back(session);
+        }
+
+        session->run();
+    }
+
+    // Accept another connection
+    do_accept();
+}
+
+void HttpAndWebSocketServer::remove_session(HttpAndWebSocketSession* session)
+{
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    sessions_.erase(
+        std::remove_if(sessions_.begin(), sessions_.end(),
+            [session](const std::weak_ptr<HttpAndWebSocketSession>& weak_session) {
+                return weak_session.expired() || weak_session.lock().get() == session;
+            }),
+        sessions_.end());
+}
+
+} // namespace atem

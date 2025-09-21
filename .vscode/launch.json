@@ -1,0 +1,36 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "(macOS) Launch",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/build/ATEMTallyServer",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${workspaceFolder}/build",
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "lldb",
+			"preLaunchTask": "CMake: build",
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for lldb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				}
+			]
+		},
+		{
+			"name": "(Windows) Launch",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/build/bin/Release/ATEMTallyServer.exe",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${workspaceFolder}/build",
+			"environment": [],
+			"preLaunchTask": "CMake: build"
+		}
+	]
+}

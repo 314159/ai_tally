@@ -13,6 +13,8 @@
 #if defined(__APPLE__)
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
+#import <Cocoa/Cocoa.h>
+#include <SDL_syswm.h>
 #endif
 
 namespace atem {
@@ -27,6 +29,17 @@ GuiManager::GuiManager()
 GuiManager::~GuiManager()
 {
     stop();
+#if defined(__APPLE__)
+    // Release bridged Metal objects that we retained in init()
+    if (metal_command_queue_) {
+        CFBridgingRelease((CFTypeRef)metal_command_queue_);
+        metal_command_queue_ = nullptr;
+    }
+    if (metal_device_) {
+        CFBridgingRelease((CFTypeRef)metal_device_);
+        metal_device_ = nullptr;
+    }
+#endif
 #if defined(__APPLE__)
     ImGui_ImplMetal_Shutdown();
 #else
@@ -58,14 +71,19 @@ bool GuiManager::init()
     // Create a window suitable for Metal
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_METAL);
     window_ = SDL_CreateWindow("ATEM Tally Monitor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 200, window_flags);
+    std::cerr << "[GuiManager] window_ = " << window_ << std::endl;
 
     // Setup Metal
+    // Create the Metal device and take ownership (retain)
     metal_device_ = (void*)CFBridgingRetain(MTLCreateSystemDefaultDevice());
     if (!metal_device_) {
         std::cerr << "Error: Could not create Metal view." << std::endl;
         return false;
     }
-    metal_command_queue_ = [(__bridge id<MTLDevice>)metal_device_ newCommandQueue];
+    std::cerr << "[GuiManager] metal_device_ = " << metal_device_ << std::endl;
+    // Create a command queue and retain it as well
+    metal_command_queue_ = (void*)CFBridgingRetain([(__bridge id<MTLDevice>)metal_device_ newCommandQueue]);
+    std::cerr << "[GuiManager] metal_command_queue_ = " << metal_command_queue_ << std::endl;
 
     // Initialize ImGui
     IMGUI_CHECKVERSION();
@@ -129,6 +147,9 @@ void GuiManager::stop()
 
 void GuiManager::update_tally_state(const TallyUpdate& update)
 {
+    std::ostringstream oss;
+    oss << "[GuiManager] update_tally_state called on thread " << std::this_thread::get_id() << " for input " << update.input_id << std::endl;
+    std::cout << oss.str();
     if (update.input_id > 0 && update.input_id <= 8) {
         std::lock_guard<std::mutex> lock(tally_states_mutex_);
         tally_states_[update.input_id].program = update.program;
@@ -152,11 +173,81 @@ void GuiManager::process_events()
 
 void GuiManager::render()
 {
+    std::ostringstream _render_log;
+    _render_log << "[GuiManager] render() start on thread " << std::this_thread::get_id() << std::endl;
+    std::cout << _render_log.str();
 #if defined(__APPLE__)
     @autoreleasepool {
-        id<CAMetalDrawable> drawable = [static_cast<CAMetalLayer*>(SDL_Metal_GetLayer(window_)) nextDrawable];
-        if (!drawable)
+        std::cerr << "[GuiManager] entered autoreleasepool" << std::endl;
+        if (!window_) {
+            std::cerr << "[GuiManager] render: window_ is null, skipping render." << std::endl;
             return;
+        }
+
+        // Prefer querying the native window info to safely access the CAMetalLayer
+        SDL_SysWMinfo wmInfo;
+        SDL_VERSION(&wmInfo.version);
+        if (!SDL_GetWindowWMInfo(window_, &wmInfo)) {
+            std::cerr << "[GuiManager] render: SDL_GetWindowWMInfo failed: " << SDL_GetError() << std::endl;
+            return;
+        }
+
+        CAMetalLayer* layer = nullptr;
+#if defined(__APPLE__)
+        if (wmInfo.subsystem == SDL_SYSWM_COCOA) {
+            NSWindow* nsWindow = (__bridge NSWindow*)wmInfo.info.cocoa.window;
+            if (!nsWindow) {
+                std::cerr << "[GuiManager] render: no cocoa window available" << std::endl;
+                return;
+            }
+
+            NSView* contentView = [nsWindow contentView];
+            if (!contentView) {
+                std::cerr << "[GuiManager] render: contentView is null" << std::endl;
+                return;
+            }
+
+            // Ensure the view has a layer and attempt to use it as CAMetalLayer
+            CALayer* viewLayer = [contentView layer];
+            if (viewLayer && [viewLayer isKindOfClass:[CAMetalLayer class]]) {
+                layer = (CAMetalLayer*)viewLayer;
+            } else {
+                std::cerr << "[GuiManager] render: view has no CAMetalLayer - creating one" << std::endl;
+                // Create a CAMetalLayer and attach it to the view so Metal rendering can proceed
+                CAMetalLayer* createdLayer = [CAMetalLayer layer];
+                if (metal_device_) {
+                    id<MTLDevice> dev = (__bridge id<MTLDevice>)metal_device_;
+                    createdLayer.device = dev;
+                }
+                createdLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+                createdLayer.frame = [contentView bounds];
+                [contentView setWantsLayer:YES];
+                [contentView setLayer:createdLayer];
+                layer = createdLayer;
+            }
+        }
+#endif
+
+        // Fallback: try the SDL helper in case the Cocoa view path didn't yield a CAMetalLayer
+        if (!layer) {
+            CAMetalLayer* sdlLayer = (CAMetalLayer*)SDL_Metal_GetLayer(window_);
+            if (sdlLayer) {
+                layer = sdlLayer;
+                std::cerr << "[GuiManager] render: obtained CAMetalLayer from SDL_Metal_GetLayer" << std::endl;
+            }
+        }
+
+        if (!layer) {
+            std::cerr << "[GuiManager] render: CAMetalLayer is null (couldn't get from window), skipping render." << std::endl;
+            return;
+        }
+
+        id<CAMetalDrawable> drawable = [layer nextDrawable];
+        std::cerr << "[GuiManager] drawable = " << drawable << std::endl;
+        if (!drawable) {
+            std::cerr << "[GuiManager] render: drawable is null, skipping render." << std::endl;
+            return;
+        }
 
         MTLRenderPassDescriptor* render_pass_descriptor = [MTLRenderPassDescriptor new];
         render_pass_descriptor.colorAttachments[0].texture = drawable.texture;
@@ -211,9 +302,12 @@ void GuiManager::render()
         ImGui::Render();
 
 #if defined(__APPLE__)
-        id<MTLCommandBuffer> command_buffer = [(__bridge id<MTLCommandQueue>)metal_command_queue_ commandBuffer];
+    std::cerr << "[GuiManager] metal_command_queue_ (before cmd buffer) = " << metal_command_queue_ << std::endl;
+    id<MTLCommandBuffer> command_buffer = [(__bridge id<MTLCommandQueue>)metal_command_queue_ commandBuffer];
+    std::cerr << "[GuiManager] command_buffer = " << command_buffer << std::endl;
 
-        id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor:render_pass_descriptor];
+    id<MTLRenderCommandEncoder> render_encoder = [command_buffer renderCommandEncoderWithDescriptor:render_pass_descriptor];
+    std::cerr << "[GuiManager] render_encoder = " << render_encoder << std::endl;
         ImGui_ImplMetal_RenderDrawData(ImGui::GetDrawData(), command_buffer, render_encoder);
         [render_encoder endEncoding];
 

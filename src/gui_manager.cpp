@@ -13,6 +13,8 @@
 #if defined(__APPLE__)
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
+#import <Cocoa/Cocoa.h>
+#include <SDL_syswm.h>
 #endif
 
 namespace atem {
@@ -182,10 +184,61 @@ void GuiManager::render()
             return;
         }
 
-        CAMetalLayer* layer = static_cast<CAMetalLayer*>(SDL_Metal_GetLayer(window_));
-        std::cerr << "[GuiManager] CAMetalLayer* = " << layer << std::endl;
+        // Prefer querying the native window info to safely access the CAMetalLayer
+        SDL_SysWMinfo wmInfo;
+        SDL_VERSION(&wmInfo.version);
+        if (!SDL_GetWindowWMInfo(window_, &wmInfo)) {
+            std::cerr << "[GuiManager] render: SDL_GetWindowWMInfo failed: " << SDL_GetError() << std::endl;
+            return;
+        }
+
+        CAMetalLayer* layer = nullptr;
+#if defined(__APPLE__)
+        if (wmInfo.subsystem == SDL_SYSWM_COCOA) {
+            NSWindow* nsWindow = (__bridge NSWindow*)wmInfo.info.cocoa.window;
+            if (!nsWindow) {
+                std::cerr << "[GuiManager] render: no cocoa window available" << std::endl;
+                return;
+            }
+
+            NSView* contentView = [nsWindow contentView];
+            if (!contentView) {
+                std::cerr << "[GuiManager] render: contentView is null" << std::endl;
+                return;
+            }
+
+            // Ensure the view has a layer and attempt to use it as CAMetalLayer
+            CALayer* viewLayer = [contentView layer];
+            if (viewLayer && [viewLayer isKindOfClass:[CAMetalLayer class]]) {
+                layer = (CAMetalLayer*)viewLayer;
+            } else {
+                std::cerr << "[GuiManager] render: view has no CAMetalLayer - creating one" << std::endl;
+                // Create a CAMetalLayer and attach it to the view so Metal rendering can proceed
+                CAMetalLayer* createdLayer = [CAMetalLayer layer];
+                if (metal_device_) {
+                    id<MTLDevice> dev = (__bridge id<MTLDevice>)metal_device_;
+                    createdLayer.device = dev;
+                }
+                createdLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+                createdLayer.frame = [contentView bounds];
+                [contentView setWantsLayer:YES];
+                [contentView setLayer:createdLayer];
+                layer = createdLayer;
+            }
+        }
+#endif
+
+        // Fallback: try the SDL helper in case the Cocoa view path didn't yield a CAMetalLayer
         if (!layer) {
-            std::cerr << "[GuiManager] render: CAMetalLayer is null, skipping render." << std::endl;
+            CAMetalLayer* sdlLayer = (CAMetalLayer*)SDL_Metal_GetLayer(window_);
+            if (sdlLayer) {
+                layer = sdlLayer;
+                std::cerr << "[GuiManager] render: obtained CAMetalLayer from SDL_Metal_GetLayer" << std::endl;
+            }
+        }
+
+        if (!layer) {
+            std::cerr << "[GuiManager] render: CAMetalLayer is null (couldn't get from window), skipping render." << std::endl;
             return;
         }
 

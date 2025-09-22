@@ -31,6 +31,8 @@ elseif(APPLE)
     set(PLATFORM_LIBS "-framework CoreFoundation")
     set(ATEM_SDK_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/Blackmagic ATEM Switchers SDK ${BMD_SDK_VERSION}/Mac OS X/include")
     set(ATEM_SDK_DISPATCH_SRC "${CMAKE_SOURCE_DIR}/Blackmagic ATEM Switchers SDK ${BMD_SDK_VERSION}/Mac OS X/include/BMDSwitcherAPIDispatch.cpp")
+    # Set the macOS deployment target to ensure modern APIs are available.
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
 else()
     message(FATAL_ERROR "Unsupported platform")
 endif()
@@ -46,27 +48,6 @@ CPMAddPackage(
         "BOOST_INCLUDE_LIBRARIES beast\\\;asio\\\;system\\\;thread\\\;chrono\\\;json\\\;program_options"
 )
 
-# --- Dear ImGui (GUI) ---
-CPMAddPackage(
-    NAME imgui
-    GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG v1.90.4
-)
-
-# --- SDL2 (Windowing and Events) ---
-CPMAddPackage(
-    NAME SDL
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-    GIT_TAG release-2.30.2
-)
-
-# --- GLEW (OpenGL Extension Wrangler) ---
-CPMAddPackage(
-    NAME glew
-    GIT_REPOSITORY https://github.com/nigels-com/glew.git
-    GIT_TAG glew-2.2.0
-)
-
 # Add ATEM SDK (mock implementation for this example)
 set(ATEM_SDK_SOURCES
     src/atem/atem_connection.cpp
@@ -79,14 +60,7 @@ add_executable(${PROJECT_NAME}
     src/main.cpp
     src/websocket_server.cpp
     src/tally_monitor.cpp
-    src/gui_manager.cpp
     ${ATEM_SDK_SOURCES}
-    # Add ImGui source files directly to the executable
-    ${imgui_SOURCE_DIR}/imgui.cpp
-    ${imgui_SOURCE_DIR}/imgui_draw.cpp
-    ${imgui_SOURCE_DIR}/imgui_tables.cpp
-    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
     ${ATEM_SDK_DISPATCH_SRC}
     ${PLATFORM_SOURCES}
 )
@@ -97,9 +71,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/platform
     src/atem
     ${ATEM_SDK_INCLUDE_DIR}
-    ${imgui_SOURCE_DIR}
-    ${glew_INCLUDE_DIR}
-    ${imgui_SOURCE_DIR}/backends
 )
 
 # Link libraries
@@ -113,30 +84,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Boost::program_options
     ${PLATFORM_LIBS}
 )
-
-# Link GUI libraries. This will also handle their include directories.
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 # Keep SDL for windowing
-
-)
-
-if(APPLE)
-    # Link against Metal and other required frameworks for the Metal backend
-    find_library(METAL_LIBRARY Metal)
-    find_library(FOUNDATION_LIBRARY Foundation)
-    find_library(QUARTZCORE_LIBRARY QuartzCore)
-    target_link_libraries(${PROJECT_NAME} PRIVATE ${METAL_LIBRARY} ${FOUNDATION_LIBRARY} ${QUARTZCORE_LIBRARY})
-
-    # Add ImGui's Metal backend source directly. Note it's an Objective-C++ file.
-    target_sources(${PROJECT_NAME} PRIVATE ${imgui_SOURCE_DIR}/backends/imgui_impl_metal.mm)
-    # Compile our gui_manager as Objective-C++ on Mac
-    set_source_files_properties(src/gui_manager.cpp PROPERTIES COMPILE_FLAGS "-x objective-c++")
-else()
-    # Keep GLEW for non-Apple platforms
-    target_link_libraries(${PROJECT_NAME} PRIVATE glew_s)
-    # Add ImGui's OpenGL backend source for non-Apple platforms
-    target_sources(${PROJECT_NAME} PRIVATE ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
-
-endif()
 
 # Compiler-specific options
 if(MSVC)

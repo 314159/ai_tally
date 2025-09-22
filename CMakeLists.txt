@@ -80,7 +80,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/platform
     src/atem
     ${ATEM_SDK_INCLUDE_DIR}
-    ${ftxui_SOURCE_DIR}/include
 )
 
 # Link libraries
@@ -91,9 +90,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Boost::thread
     Boost::chrono
     Boost::json
-    Boost::program_options
-    ftxui::screen
-    ftxui::component
+    Boost::program_options # It's good practice to keep this if you use it.
+    ftxui::screen # FTXUI components
+    ftxui::component # FTXUI components
     ${PLATFORM_LIBS}
 )
 

@@ -1,4 +1,5 @@
 #include "tally_monitor.h"
+#include "config.h"
 #include <chrono>
 #include <iostream>
 
@@ -6,12 +7,13 @@ using namespace std::chrono_literals;
 
 namespace atem {
 
-TallyMonitor::TallyMonitor(boost::asio::io_context& ioc, std::string atem_ip_address, uint16_t mock_inputs)
+TallyMonitor::TallyMonitor(boost::asio::io_context& ioc, const Config& config)
     : ioc_(ioc)
-    , atem_ip_address_(std::move(atem_ip_address))
-    , atem_connection_(std::make_unique<ATEMConnection>(mock_inputs))
+    , config_(config)
+    , atem_connection_(std::make_unique<ATEMConnection>(config.mock_inputs))
     , monitor_timer_(std::make_unique<boost::asio::steady_timer>(ioc))
 {
+    atem_connection_->set_mock_mode(config_.mock_enabled);
 }
 
 TallyMonitor::~TallyMonitor()
@@ -28,7 +30,7 @@ void TallyMonitor::start()
     std::cout << "Starting ATEM tally monitor...\n";
 
     // Initialize ATEM connection
-    if (!atem_connection_->connect(atem_ip_address_)) {
+    if (!config_.mock_enabled && !atem_connection_->connect(config_.atem_ip)) {
         std::cout << "Warning: Could not connect to ATEM switcher. Using mock data.\n";
         atem_connection_->set_mock_mode(true);
     }

@@ -102,5 +102,14 @@
 		"variant": "cpp",
 		"vector": "cpp",
 		"algorithm": "cpp"
+	},
+	"editor.formatOnSave": true,
+	"files.trimTrailingWhitespace": true,
+	"files.insertFinalNewline": true,
+	"files.autoSave": "afterDelay",
+	"files.autoSaveDelay": 1000,
+	"C_Cpp.clang_format_fallbackStyle": "WebKit",
+	"[cpp]": {
+		"editor.defaultFormatter": "ms-vscode.cpptools"
 	}
 }

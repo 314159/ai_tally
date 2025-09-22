@@ -10,11 +10,13 @@
 
 namespace atem {
 
+struct Config;
+
 class TallyMonitor {
 public:
     using TallyCallback = std::function<void(const TallyUpdate&)>;
 
-    explicit TallyMonitor(boost::asio::io_context& ioc, std::string atem_ip_address, uint16_t mock_inputs = 8);
+    explicit TallyMonitor(boost::asio::io_context& ioc, const Config& config);
     ~TallyMonitor();
 
     // Non-copyable, movable
@@ -41,7 +43,7 @@ private:
     void handle_tally_change(const TallyUpdate& update);
 
     boost::asio::io_context& ioc_;
-    std::string atem_ip_address_;
+    const Config& config_;
     std::unique_ptr<ATEMConnection> atem_connection_;
     std::unique_ptr<boost::asio::steady_timer> monitor_timer_;
 

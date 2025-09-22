@@ -33,6 +33,7 @@ void TallyMonitor::start()
     if (!config_.mock_enabled && !atem_connection_->connect(config_.atem_ip)) {
         std::cout << "Warning: Could not connect to ATEM switcher. Using mock data.\n";
         atem_connection_->set_mock_mode(true);
+        notify_mode_change(true);
     }
 
     // Set up tally callback
@@ -62,6 +63,11 @@ void TallyMonitor::stop()
 void TallyMonitor::on_tally_change(TallyCallback callback)
 {
     tally_callback_ = std::move(callback);
+}
+
+void TallyMonitor::on_mode_change(ModeChangeCallback callback)
+{
+    mode_change_callback_ = std::move(callback);
 }
 
 TallyState TallyMonitor::get_tally_state(uint16_t input_id) const
@@ -138,6 +144,14 @@ void TallyMonitor::handle_tally_change(const TallyUpdate& update)
     if (tally_callback_) {
         // Post to IO context to ensure thread safety
         boost::asio::post(ioc_, [this, update]() { tally_callback_(update); });
+    }
+}
+
+void TallyMonitor::notify_mode_change(bool is_mock)
+{
+    if (mode_change_callback_) {
+        // Post to IO context to ensure thread safety
+        boost::asio::post(ioc_, [this, is_mock]() { mode_change_callback_(is_mock); });
     }
 }
 

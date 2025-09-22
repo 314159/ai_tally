@@ -14,6 +14,7 @@ struct Config;
 
 class TallyMonitor {
 public:
+    using ModeChangeCallback = std::function<void(bool)>;
     using TallyCallback = std::function<void(const TallyUpdate&)>;
 
     explicit TallyMonitor(boost::asio::io_context& ioc, const Config& config);
@@ -29,6 +30,7 @@ public:
     void stop();
 
     void on_tally_change(TallyCallback callback);
+    void on_mode_change(ModeChangeCallback callback);
 
     // Get current tally state for a specific input
     TallyState get_tally_state(uint16_t input_id) const;
@@ -41,12 +43,14 @@ public:
 private:
     void monitor_loop();
     void handle_tally_change(const TallyUpdate& update);
+    void notify_mode_change(bool is_mock);
 
     boost::asio::io_context& ioc_;
     const Config& config_;
     std::unique_ptr<ATEMConnection> atem_connection_;
     std::unique_ptr<boost::asio::steady_timer> monitor_timer_;
 
+    ModeChangeCallback mode_change_callback_;
     TallyCallback tally_callback_;
     std::atomic<bool> running_ { false };
 

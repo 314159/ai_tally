@@ -18,6 +18,9 @@ public:
     // Update the tally state displayed in the TUI. Thread-safe.
     void update_tally_state(const TallyUpdate& update);
 
+    // Update the mock mode status. Thread-safe.
+    void set_mock_mode(bool is_mock);
+
     // Run the TUI event loop. This is a blocking call.
     void run();
 
@@ -42,6 +45,7 @@ private:
 
     bool m_show_config_modal = false;
     std::string m_editable_atem_ip;
+    std::atomic<bool> m_is_mock_mode = false;
 };
 
 } // namespace atem

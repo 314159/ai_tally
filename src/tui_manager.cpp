@@ -21,6 +21,7 @@ TuiManager::TuiManager(Config& config)
         m_tally_states[i].input_id = i + 1;
     }
     m_editable_atem_ip = m_config.atem_ip;
+    m_is_mock_mode = m_config.mock_enabled;
 
     // --- Component Setup ---
     auto tally_grid_renderer = Renderer([this] {
@@ -72,6 +73,14 @@ void TuiManager::update_tally_state(const TallyUpdate& update)
     }
 }
 
+void TuiManager::set_mock_mode(bool is_mock)
+{
+    if (m_is_mock_mode.exchange(is_mock) != is_mock) {
+        // Post an event to redraw the screen if the state changed
+        m_screen.PostEvent(Event::Custom);
+    }
+}
+
 void TuiManager::run()
 {
     // --- Component Composition ---
@@ -79,8 +88,12 @@ void TuiManager::run()
 
     // Main layout renderer
     auto main_layout = Renderer(m_main_component, [&] {
+        auto title = m_is_mock_mode.load()
+            ? hbox({ text("ATEM Tally Server "), text("(MOCK MODE)") | bold | color(Color::Yellow) })
+            : text("ATEM Tally Server");
+
         return vbox({
-                   text("ATEM Tally Server") | bold | hcenter,
+                   title | bold | hcenter,
                    separator(),
                    m_main_component->Render() | flex,
                    separator(),
@@ -119,7 +132,7 @@ Element TuiManager::render_status_panel()
 {
     auto status_table = Table({ { "ATEM IP", m_config.atem_ip },
         { "WebSocket", m_config.ws_address + ":" + std::to_string(m_config.ws_port) },
-        { "Mock Mode", m_config.mock_enabled ? "Enabled" : "Disabled" } });
+        { "Mock Mode", m_is_mock_mode.load() ? "Enabled" : "Disabled" } });
 
     status_table.SelectAll().Border(LIGHT);
     status_table.SelectColumn(0).Decorate(bold);

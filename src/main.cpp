@@ -89,6 +89,12 @@ int main(int argc, char* argv[])
                 tui->update_tally_state(update);
         });
 
+        // Connect mock mode changes to TUI
+        monitor->on_mode_change([&](bool is_mock) {
+            if (tui)
+                tui->set_mock_mode(is_mock);
+        });
+
         // Run the io_context in its own thread for server operations
         std::thread server_thread([&io_context]() {
             io_context.run();

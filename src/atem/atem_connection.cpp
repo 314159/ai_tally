@@ -100,11 +100,20 @@ void ATEMConnection::on_disconnected()
 
 void ATEMConnection::init_mock_data()
 {
-    // Initialize 8 mock inputs
+    mock_tally_states_.clear();
+    // Initialize mock inputs
     for (uint16_t i = 1; i <= mock_input_count_; ++i) {
         mock_tally_states_[i] = TallyState {
             i, false, false, std::chrono::system_clock::now()
         };
+    }
+
+    // Set initial program and preview states
+    if (mock_input_count_ >= 1) {
+        mock_tally_states_[1].program = true;
+    }
+    if (mock_input_count_ >= 2) {
+        mock_tally_states_[2].preview = true;
     }
 }
 

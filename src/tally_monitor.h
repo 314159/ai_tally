@@ -1,7 +1,8 @@
 #pragma once
 
-#include "atem_connection.h"
 #include "config.h" // Include the full definition of Config
+
+#include "atem_connection.h"
 #include "tally_state.h"
 #include <atomic>
 #include <boost/asio.hpp>
@@ -13,6 +14,7 @@ namespace atem {
 
 class TallyMonitor {
 public:
+    using ReadyCallback = std::function<void()>;
     using ModeChangeCallback = std::function<void(bool)>;
     using TallyCallback = std::function<void(const TallyUpdate&)>;
 
@@ -28,6 +30,10 @@ public:
     void start();
     void stop();
 
+    // Reconnect to the ATEM switcher with current config.
+    void reconnect();
+
+    void on_ready(ReadyCallback callback);
     void on_tally_change(TallyCallback callback);
     void on_mode_change(ModeChangeCallback callback);
 
@@ -44,6 +50,7 @@ private:
     void handle_tally_change(const TallyUpdate& update);
     void notify_mode_change(bool is_mock);
 
+    ReadyCallback ready_callback_;
     boost::asio::io_context& ioc_;
     const Config& config_;
     std::unique_ptr<ATEMConnection> atem_connection_;

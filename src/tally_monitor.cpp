@@ -1,5 +1,6 @@
-#include "tally_monitor.h"
 #include "config.h"
+
+#include "tally_monitor.h"
 #include <chrono>
 #include <iostream>
 
@@ -35,6 +36,9 @@ void TallyMonitor::start()
         atem_connection_->set_mock_mode(true);
         notify_mode_change(true);
     }
+    if (ready_callback_) {
+        ready_callback_();
+    }
 
     // Set up tally callback
     atem_connection_->on_tally_change([this](const TallyUpdate& update) { handle_tally_change(update); });
@@ -58,6 +62,29 @@ void TallyMonitor::stop()
     if (atem_connection_) {
         atem_connection_->disconnect();
     }
+}
+
+void TallyMonitor::reconnect()
+{
+    // Post to the io_context to ensure this happens on the correct thread.
+    boost::asio::post(ioc_, [this]() {
+        std::cout << "Reconnecting to ATEM switcher...\n";
+        atem_connection_->disconnect();
+
+        // Attempt to connect with the potentially updated IP from config_
+        if (!config_.mock_enabled && !atem_connection_->connect(config_.atem_ip)) {
+            std::cout << "Warning: Could not connect to ATEM switcher. Using mock data.\n";
+            atem_connection_->set_mock_mode(true);
+            notify_mode_change(true);
+        } else {
+            notify_mode_change(atem_connection_->is_mock_mode());
+        }
+    });
+}
+
+void TallyMonitor::on_ready(ReadyCallback callback)
+{
+    ready_callback_ = std::move(callback);
 }
 
 void TallyMonitor::on_tally_change(TallyCallback callback)

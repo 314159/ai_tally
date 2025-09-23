@@ -5,6 +5,7 @@
 #include "websocket_server.h"
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
+#include <future> // Required for promise and future
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -95,6 +96,15 @@ int main(int argc, char* argv[])
                 tui->set_mock_mode(is_mock);
         });
 
+        // Connect TUI reconnect requests to the monitor
+        tui->on_reconnect([&]() {
+            if (monitor)
+                monitor->reconnect();
+        });
+
+        // Keep the io_context running until it's explicitly stopped.
+        auto work_guard = boost::asio::make_work_guard(io_context);
+
         // Run the io_context in its own thread for server operations
         std::thread server_thread([&io_context]() {
             io_context.run();
@@ -108,11 +118,17 @@ int main(int argc, char* argv[])
                 tui->stop(); // This will unblock the main thread
         });
 
+        std::promise<void> server_ready_promise;
+        std::future<void> server_ready_future = server_ready_promise.get_future();
+        monitor->on_ready([&server_ready_promise]() {
+            server_ready_promise.set_value();
+        });
+        // Start the monitor first and wait for it to be ready.
+        monitor->start();
+        server_ready_future.wait();
+
         // Start services
         server->start();
-        monitor->start();
-
-        // Run the TUI on the main thread. This will block until 'q' is pressed or a signal is received.
         tui->run();
 
         // --- Shutdown ---
@@ -121,6 +137,7 @@ int main(int argc, char* argv[])
             server->stop();
         if (monitor)
             monitor->stop();
+        work_guard.reset(); // Allow the io_context to stop.
         io_context.stop();
         if (server_thread.joinable()) {
             server_thread.join();

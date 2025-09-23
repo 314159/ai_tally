@@ -60,6 +60,9 @@ TuiManager::TuiManager(Config& config)
     });
 
     m_main_component = tally_grid_renderer;
+
+    // Create the config modal component once.
+    m_config_modal_component = render_config_modal();
 }
 
 void TuiManager::update_tally_state(const TallyUpdate& update)
@@ -81,12 +84,14 @@ void TuiManager::set_mock_mode(bool is_mock)
     }
 }
 
+void TuiManager::on_reconnect(ReconnectCallback callback)
+{
+    m_reconnect_callback = std::move(callback);
+}
+
 void TuiManager::run()
 {
     // --- Component Composition ---
-    auto config_modal = render_config_modal();
-
-    // Main layout renderer
     auto main_layout = Renderer(m_main_component, [&] {
         auto title = m_is_mock_mode.load()
             ? hbox({ text("ATEM Tally Server "), text("(MOCK MODE)") | bold | color(Color::Yellow) })
@@ -104,23 +109,27 @@ void TuiManager::run()
             | border;
     });
 
-    // Add the modal to the main layout. It will be displayed on top when m_show_config_modal is true.
-    auto main_container = Modal(main_layout, config_modal, &m_show_config_modal);
-
     // Add global event handling
-    main_container |= CatchEvent([&](Event event) {
+    auto event_handler = CatchEvent([&](Event event) {
         if (event == Event::Character('q')) {
             stop();
             return true;
         }
         if (event == Event::Character('c')) {
+            // When opening the modal, ensure the editable IP is up-to-date.
+            if (!m_show_config_modal) {
+                m_editable_atem_ip = m_config.atem_ip;
+            }
             m_show_config_modal = !m_show_config_modal;
             return true;
         }
         return false;
     });
 
-    m_screen.Loop(main_container);
+    // The Modal component wraps the main layout and is controlled by m_show_config_modal.
+    // The event handler wraps the modal to catch global events like 'q' and 'c'.
+    auto root_component = Modal(main_layout, m_config_modal_component, &m_show_config_modal);
+    m_screen.Loop(root_component | event_handler);
 }
 
 void TuiManager::stop()
@@ -145,7 +154,9 @@ Component TuiManager::render_config_modal()
     auto on_save = [&] {
         m_config.atem_ip = m_editable_atem_ip;
         m_show_config_modal = false;
-        // Here you would typically trigger a reconnect of the TallyMonitor
+        if (m_reconnect_callback) {
+            m_reconnect_callback();
+        }
     };
 
     auto on_cancel = [&] {

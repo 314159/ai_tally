@@ -1,10 +1,10 @@
 #pragma once
 
+#include <boost/json.hpp>
 #include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <unordered_map>
-#include <boost/json.hpp>
 
 namespace atem {
 

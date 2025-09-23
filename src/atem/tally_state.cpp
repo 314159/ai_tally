@@ -4,9 +4,8 @@
 // Currently all implementations are in the header as inline/default functions
 // This file can be extended with more complex functionality as needed
 
-namespace atem
-{
+namespace atem {
 
-	// Additional utility functions can be added here if needed
+// Additional utility functions can be added here if needed
 
 } // namespace atem

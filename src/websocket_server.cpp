@@ -60,10 +60,18 @@ namespace {
             font-weight: bold;
             color: rgba(255, 255, 255, 0.5);
             text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+            transition: opacity 0.5s ease;
+        }
+        @keyframes fade {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 0.8; }
+        }
+        body.disconnected .input-number {
+            animation: fade 2s infinite ease-in-out;
         }
     </style>
 </head>
-<body class="off">
+<body class="off disconnected">
     <div class="input-number">)"
             + std::to_string(input_id) + R"(</div>
     <script>
@@ -75,6 +83,7 @@ namespace {
         const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
         ws = new WebSocket(url);
 
+        ws.onopen = () => { document.body.classList.remove('disconnected'); };
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === 'tally_update' && data.input === inputId) {
@@ -89,7 +98,7 @@ namespace {
         };
 
         ws.onclose = () => {
-            document.body.className = 'off';
+            document.body.className = 'off disconnected';
             setTimeout(connect, 1000); // Try to reconnect after 1 second
         };
 

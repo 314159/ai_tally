@@ -1,6 +1,7 @@
 #pragma once
 
 #include "atem_connection.h"
+#include "config.h" // Include the full definition of Config
 #include "tally_state.h"
 #include <atomic>
 #include <boost/asio.hpp>
@@ -9,8 +10,6 @@
 #include <thread>
 
 namespace atem {
-
-struct Config;
 
 class TallyMonitor {
 public:

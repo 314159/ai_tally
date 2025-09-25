@@ -139,9 +139,9 @@ void TuiManager::stop()
 
 Element TuiManager::render_status_panel()
 {
-    auto status_table = Table({ { "ATEM IP", m_config.atem_ip },
-        { "WebSocket", m_config.ws_address + ":" + std::to_string(m_config.ws_port) },
-        { "Mock Mode", m_is_mock_mode.load() ? "Enabled" : "Disabled" } });
+    auto status_table = Table({ { "ATEM IP ", m_config.atem_ip },
+        { "WebSocket ", m_config.ws_address + ":" + std::to_string(m_config.ws_port) },
+        { "Mock Mode ", m_is_mock_mode.load() ? "Enabled" : "Disabled" } });
 
     status_table.SelectAll().Border(LIGHT);
     status_table.SelectColumn(0).Decorate(bold);

@@ -109,6 +109,16 @@
 	"files.autoSave": "afterDelay",
 	"files.autoSaveDelay": 1000,
 	"C_Cpp.clang_format_fallbackStyle": "WebKit",
+	// Tell the C/C++ extension where to find the compilation database
+	"C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+	// --- Clang-Tidy Integration ---
+	"C_Cpp.codeAnalysis.clangTidy.enabled": true, // Enable clang-tidy analysis
+	// Rely on clang-tidy being in the system's PATH. This makes the configuration
+	// cross-platform, as each developer is responsible for ensuring their
+	// environment is set up correctly.
+	"C_Cpp.codeAnalysis.clangTidy.path": "clang-tidy",
+	"C_Cpp.codeAnalysis.clangTidy.useBuildFolder": false,
+	"C_Cpp.codeAnalysis.run": "onSave",
 	"[cpp]": {
 		"editor.defaultFormatter": "ms-vscode.cpptools"
 	}

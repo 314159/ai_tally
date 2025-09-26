@@ -1,0 +1,19 @@
+---
+# This file configures clang-tidy.
+# For a full list of checks, see: https://clang.llvm.org/extra/clang-tidy/checks/list.html
+
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  readability-*
+  # modernize-*,
+
+# Example of disabling a specific check if it's too noisy for your project.
+# For instance, modernize-use-trailing-return-type can be a matter of style.
+# -modernize-use-trailing-return-type
+
+HeaderFilterRegex: ".*"
+
+WarningsAsErrors: "*"

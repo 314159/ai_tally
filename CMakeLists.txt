@@ -102,6 +102,17 @@ else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
+# Enable Clang-Tidy for static analysis
+find_program(CLANG_TIDY_EXE clang-tidy)
+if(CLANG_TIDY_EXE)
+    message(STATUS "Found clang-tidy: ${CLANG_TIDY_EXE}")
+    # The presence of a .clang-tidy file in the source tree root will be
+    # automatically detected by clang-tidy.
+    set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY_EXE})
+else()
+    message(WARNING "clang-tidy not found. Static analysis will be skipped.")
+endif()
+
 # Copy resources
 file(COPY ${CMAKE_SOURCE_DIR}/config DESTINATION ${CMAKE_BINARY_DIR})
 

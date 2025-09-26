@@ -3,6 +3,7 @@
 #include <boost/json.hpp>
 #include <cstdint>
 #include <fstream>
+#include <gsl/gsl>
 #include <iostream>
 #include <string>
 
@@ -22,7 +23,7 @@ struct Config {
     uint16_t mock_inputs = 8;
 
     // Load configuration from a JSON file
-    void load_from_file(const std::string& filename)
+    void load_from_file(gsl::czstring filename)
     {
         std::ifstream file(filename);
         if (!file) {
@@ -44,18 +45,18 @@ struct Config {
 
             if (root.if_contains("websocket") && jv.at("websocket").is_object()) {
                 const auto& ws = jv.at("websocket").as_object();
-                if (ws.if_contains("address")) {
-                    ws_address = ws.at("address").as_string().c_str();
+                if (ws.contains("address")) {
+                    ws_address = boost::json::value_to<std::string>(ws.at("address"));
                 }
-                if (ws.if_contains("port")) {
+                if (ws.contains("port")) {
                     ws_port = static_cast<unsigned short>(ws.at("port").as_int64());
                 }
             }
 
             if (root.if_contains("atem") && jv.at("atem").is_object()) {
                 const auto& a = jv.at("atem").as_object();
-                if (a.if_contains("ip_address")) {
-                    atem_ip = a.at("ip_address").as_string().c_str();
+                if (a.contains("ip_address")) {
+                    atem_ip = boost::json::value_to<std::string>(a.at("ip_address"));
                 }
             }
 

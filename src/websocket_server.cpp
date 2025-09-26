@@ -426,19 +426,32 @@ void HttpAndWebSocketServer::stop()
     acceptor_.close(ec);
 
     std::lock_guard<std::mutex> lock(sessions_mutex_);
-    for (auto& session : sessions_) {
-        session->close();
+    for (auto& weak_session : sessions_) {
+        if (auto session = weak_session.lock()) {
+            session->close();
+        }
     }
     sessions_.clear();
 }
 
 void HttpAndWebSocketServer::broadcast_tally_update(const TallyUpdate& update)
 {
-    std::string message = boost::json::serialize(boost::json::value_from(update));
+    auto const message = std::make_shared<const std::string>(boost::json::serialize(boost::json::value_from(update)));
     std::lock_guard<std::mutex> lock(sessions_mutex_);
-    for (auto& session : sessions_) {
-        session->send(message);
-    }
+
+    // Remove expired sessions and collect active ones.
+    sessions_.erase(
+        std::remove_if(
+            sessions_.begin(),
+            sessions_.end(),
+            [&](const std::weak_ptr<HttpAndWebSocketSession>& weak_session) {
+                if (auto session = weak_session.lock()) {
+                    session->send(*message);
+                    return false; // Keep this session
+                }
+                return true; // Remove this expired session
+            }),
+        sessions_.end());
 }
 
 void HttpAndWebSocketServer::do_accept()
@@ -473,16 +486,4 @@ void HttpAndWebSocketServer::on_accept(beast::error_code ec, tcp::socket socket)
     // Accept another connection
     do_accept();
 }
-
-void HttpAndWebSocketServer::remove_session(HttpAndWebSocketSession* session)
-{
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
-    sessions_.erase(
-        std::remove_if(sessions_.begin(), sessions_.end(),
-            [session](const std::weak_ptr<HttpAndWebSocketSession>& weak_session) {
-                return weak_session.expired() || weak_session.lock().get() == session;
-            }),
-        sessions_.end());
-}
-
 } // namespace atem

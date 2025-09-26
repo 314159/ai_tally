@@ -5,6 +5,7 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <deque>
+#include <gsl/gsl>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -19,7 +20,7 @@ namespace atem {
 struct Config;
 class TallyMonitor;
 
-class HttpAndWebSocketSession : public std::enable_shared_from_this<HttpAndWebSocketSession> {
+class HttpAndWebSocketSession final : public std::enable_shared_from_this<HttpAndWebSocketSession> {
 public:
     explicit HttpAndWebSocketSession(tcp::socket&& socket, const Config& config, TallyMonitor& monitor);
     ~HttpAndWebSocketSession();
@@ -53,7 +54,7 @@ private:
     TallyMonitor& monitor_;
 };
 
-class HttpAndWebSocketServer {
+class HttpAndWebSocketServer final {
 public:
     HttpAndWebSocketServer(net::io_context& ioc, tcp::endpoint endpoint, const Config& config, TallyMonitor& monitor);
     HttpAndWebSocketServer(net::io_context& ioc, net::ip::address address, unsigned short port, const Config& config, TallyMonitor& monitor);
@@ -72,13 +73,12 @@ public:
 private:
     void do_accept();
     void on_accept(beast::error_code ec, tcp::socket socket);
-    void remove_session(HttpAndWebSocketSession* session);
 
     net::io_context& ioc_;
     tcp::acceptor acceptor_;
     const Config& config_;
     TallyMonitor& monitor_;
-    std::vector<std::shared_ptr<HttpAndWebSocketSession>> sessions_;
+    std::vector<std::weak_ptr<HttpAndWebSocketSession>> sessions_;
     std::mutex sessions_mutex_;
     bool running_ { false };
 };

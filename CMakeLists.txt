@@ -48,6 +48,14 @@ CPMAddPackage(
         "BOOST_INCLUDE_LIBRARIES beast\\\;asio\\\;system\\\;thread\\\;chrono\\\;json\\\;program_options"
 )
 
+# Find or fetch Microsoft's GSL (Guideline Support Library)
+CPMAddPackage(
+    NAME GSL
+    GITHUB_REPOSITORY microsoft/GSL
+    GIT_TAG v4.0.0 # A recent stable tag
+    OPTIONS "GSL_INSTALL ON"
+)
+
 # Add ATEM SDK (mock implementation for this example)
 set(ATEM_SDK_SOURCES
     src/atem/atem_connection.cpp
@@ -82,6 +90,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Boost::chrono
     Boost::json
     Boost::program_options
+    GSL
     ${PLATFORM_LIBS}
 )
 

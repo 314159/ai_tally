@@ -5,18 +5,18 @@
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
 #include <future> // Required for promise and future
+#include <gsl/gsl>
 #include <iostream>
 #include <memory>
 #include <thread>
 
-namespace {
-std::unique_ptr<atem::HttpAndWebSocketServer> server;
-std::unique_ptr<atem::TallyMonitor> monitor;
-} // namespace
 namespace po = boost::program_options;
 
-int main(int argc, char* argv[])
+int main(int argc, char** argv)
 {
+    // Ensure platform cleanup is always called on exit
+    auto cleanup_guard = gsl::finally([] { platform::cleanup(); });
+
     try {
         // Initialize platform-specific code
         if (!platform::initialize()) {
@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
         std::string config_file = "config/server_config.json";
 
         // Load from file first
-        config.load_from_file(config_file);
+        config.load_from_file(config_file.c_str());
 
         // Then, define and parse command-line options.
         // These will override the file settings.
@@ -49,7 +49,8 @@ int main(int argc, char* argv[])
             "Number of inputs to show in mock mode");
 
         po::variables_map vm;
-        po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
+        const gsl::span<char*> args(argv, argc);
+        po::store(po::command_line_parser(argc, args.data()).options(desc).run(), vm);
         po::notify(vm);
 
         if (vm.count("help")) {
@@ -60,9 +61,9 @@ int main(int argc, char* argv[])
 
         // Re-load from file if a different one was specified on the command line
         if (vm.count("config") && vm["config"].as<std::string>() != "config/server_config.json") {
-            config.load_from_file(config_file);
+            config.load_from_file(config_file.c_str());
             // Re-apply command line arguments to override the new file's settings
-            po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
+            po::store(po::command_line_parser(argc, args.data()).options(desc).run(), vm);
             po::notify(vm);
         }
 
@@ -72,13 +73,13 @@ int main(int argc, char* argv[])
         const unsigned short port = config.ws_port;
 
         // Create tally monitor
-        monitor = std::make_unique<atem::TallyMonitor>(io_context, config);
+        auto monitor = std::make_unique<atem::TallyMonitor>(io_context, config);
 
         // Create server
-        server = std::make_unique<atem::HttpAndWebSocketServer>(io_context, address, port, config, *monitor);
+        auto server = std::make_unique<atem::HttpAndWebSocketServer>(io_context, address, port, config, *monitor);
 
         // Connect tally updates to websocket broadcasts and TUI
-        monitor->on_tally_change([&](const atem::TallyUpdate& update) {
+        monitor->on_tally_change([&server](const atem::TallyUpdate& update) {
             server->broadcast_tally_update(update);
         });
 
@@ -132,7 +133,5 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    platform::cleanup();
-    (void)argc; // Suppress unused parameter warning
     return 0;
 }

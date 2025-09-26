@@ -82,6 +82,9 @@ int main(int argc, char* argv[])
             server->broadcast_tally_update(update);
         });
 
+        // Keep the io_context running until it's explicitly stopped.
+        auto work_guard = boost::asio::make_work_guard(io_context);
+
         // Run the io_context in its own thread for server operations
         std::thread server_thread([&io_context]() {
             io_context.run();
@@ -116,6 +119,12 @@ int main(int argc, char* argv[])
             server->stop();
         if (monitor)
             monitor->stop();
+
+        // Allow the io_context to stop by resetting the work guard.
+        work_guard.reset();
+        if (server_thread.joinable()) {
+            server_thread.join();
+        }
 
         std::cout << "Application stopped." << std::endl;
     } catch (const std::exception& e) {

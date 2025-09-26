@@ -52,7 +52,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME GSL
     GITHUB_REPOSITORY microsoft/GSL
-    GIT_TAG v4.0.0 # A recent stable tag
+    GIT_TAG v4.2.0 # A recent stable tag
     OPTIONS "GSL_INSTALL ON"
 )
 

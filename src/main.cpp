@@ -1,7 +1,6 @@
 #include "config.h"
 #include "platform_interface.h"
 #include "tally_monitor.h"
-#include "tui_manager.h"
 #include "websocket_server.h"
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
@@ -13,7 +12,6 @@
 namespace {
 std::unique_ptr<atem::HttpAndWebSocketServer> server;
 std::unique_ptr<atem::TallyMonitor> monitor;
-std::unique_ptr<atem::TuiManager> tui;
 } // namespace
 namespace po = boost::program_options;
 
@@ -73,9 +71,6 @@ int main(int argc, char* argv[])
         const auto address = boost::asio::ip::make_address(config.ws_address);
         const unsigned short port = config.ws_port;
 
-        // Create TUI Manager
-        tui = std::make_unique<atem::TuiManager>(config);
-
         // Create tally monitor
         monitor = std::make_unique<atem::TallyMonitor>(io_context, config);
 
@@ -84,38 +79,13 @@ int main(int argc, char* argv[])
 
         // Connect tally updates to websocket broadcasts and TUI
         monitor->on_tally_change([&](const atem::TallyUpdate& update) {
-            if (server)
-                server->broadcast_tally_update(update);
-            if (tui)
-                tui->update_tally_state(update);
+            server->broadcast_tally_update(update);
         });
-
-        // Connect mock mode changes to TUI
-        monitor->on_mode_change([&](bool is_mock) {
-            if (tui)
-                tui->set_mock_mode(is_mock);
-        });
-
-        // Connect TUI reconnect requests to the monitor
-        tui->on_reconnect([&]() {
-            if (monitor)
-                monitor->reconnect();
-        });
-
-        // Keep the io_context running until it's explicitly stopped.
-        auto work_guard = boost::asio::make_work_guard(io_context);
 
         // Run the io_context in its own thread for server operations
         std::thread server_thread([&io_context]() {
             io_context.run();
             std::cout << "Server thread finished." << std::endl;
-        });
-
-        // Setup signal handling to gracefully shut down
-        boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
-        signals.async_wait([&](const boost::system::error_code&, int) {
-            if (tui)
-                tui->stop(); // This will unblock the main thread
         });
 
         std::promise<void> server_ready_promise;
@@ -124,24 +94,28 @@ int main(int argc, char* argv[])
             server_ready_promise.set_value();
         });
         // Start the monitor first and wait for it to be ready.
+
+        // Setup signal handling for graceful shutdown
+        boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
+        signals.async_wait([&](const boost::system::error_code&, int) {
+            // Stop the io_context. This will cause io_context.run() to return.
+            io_context.stop();
+        });
+
         monitor->start();
         server_ready_future.wait();
 
-        // Start services
+        // Start the server
         server->start();
-        tui->run();
 
+        // The main thread will now block here until a signal is received.
+        server_thread.join();
         // --- Shutdown ---
         std::cout << "Shutting down server..." << std::endl;
         if (server)
             server->stop();
         if (monitor)
             monitor->stop();
-        work_guard.reset(); // Allow the io_context to stop.
-        io_context.stop();
-        if (server_thread.joinable()) {
-            server_thread.join();
-        }
 
         std::cout << "Application stopped." << std::endl;
     } catch (const std::exception& e) {

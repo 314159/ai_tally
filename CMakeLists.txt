@@ -48,14 +48,6 @@ CPMAddPackage(
         "BOOST_INCLUDE_LIBRARIES beast\\\;asio\\\;system\\\;thread\\\;chrono\\\;json\\\;program_options"
 )
 
-# Find or fetch FTXUI for the Text-based User Interface
-CPMAddPackage(
-    NAME ftxui
-    VERSION 6.1.9
-    GITHUB_REPOSITORY ArthurSonzogni/FTXUI
-    GIT_TAG v6.1.9
-)
-
 # Add ATEM SDK (mock implementation for this example)
 set(ATEM_SDK_SOURCES
     src/atem/atem_connection.cpp
@@ -67,7 +59,6 @@ set(ATEM_SDK_SOURCES
 add_executable(${PROJECT_NAME}
     src/main.cpp
     src/websocket_server.cpp
-    src/tui_manager.cpp
     src/tally_monitor.cpp
     ${ATEM_SDK_SOURCES}
     ${ATEM_SDK_DISPATCH_SRC}
@@ -90,9 +81,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Boost::thread
     Boost::chrono
     Boost::json
-    Boost::program_options # It's good practice to keep this if you use it.
-    ftxui::screen # FTXUI components
-    ftxui::component # FTXUI components
+    Boost::program_options
     ${PLATFORM_LIBS}
 )
 

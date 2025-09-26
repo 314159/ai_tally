@@ -55,7 +55,7 @@ namespace {
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: sans-serif; }
         body { transition: background-color 0.3s ease; display: flex; justify-content: center; align-items: center; }
         .off { background-color: #000000; }
-        .preview { background-color: #00FF00; }
+        .preview { background-color: #009900; }
         .program { background-color: #FF0000; }
         .input-number {
             display: flex;

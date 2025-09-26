@@ -65,6 +65,7 @@ set(ATEM_SDK_SOURCES
 
 # Main executable
 add_executable(${PROJECT_NAME}
+    src/config.cpp
     src/main.cpp
     src/websocket_server.cpp
     src/tally_monitor.cpp

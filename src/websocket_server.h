@@ -69,6 +69,7 @@ public:
     void start();
     void stop() noexcept;
     void broadcast_tally_update(const TallyUpdate& update);
+    void broadcast_mode_change(bool is_mock);
 
 private:
     void do_accept();

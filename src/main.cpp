@@ -83,6 +83,11 @@ int main(int argc, char** argv)
             server->broadcast_tally_update(update);
         });
 
+        // Connect mode changes to websocket broadcasts
+        monitor->on_mode_change([&server](bool is_mock) {
+            server->broadcast_mode_change(is_mock);
+        });
+
         // Keep the io_context running until it's explicitly stopped.
         auto work_guard = boost::asio::make_work_guard(io_context);
 

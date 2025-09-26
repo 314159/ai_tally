@@ -74,6 +74,32 @@ add_executable(${PROJECT_NAME}
     ${PLATFORM_SOURCES}
 )
 
+# Find Git executable for use in the custom command
+find_package(Git REQUIRED)
+
+# --- Git Versioning ---
+# This custom command generates version.h by running a CMake script.
+add_custom_command(
+    OUTPUT "${CMAKE_BINARY_DIR}/version.h"
+    # The COMMAND runs cmake in script mode (-P) on our generator script.
+    COMMAND ${CMAKE_COMMAND}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DBINARY_DIR=${CMAKE_BINARY_DIR}
+        -P "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake"
+    # DEPENDS tells CMake when to re-run this command.
+    DEPENDS
+        "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake"
+        "${CMAKE_SOURCE_DIR}/src/version.h.in"
+        "${CMAKE_SOURCE_DIR}/.git/logs/HEAD"
+    COMMENT "Generating version.h from git"
+)
+
+# Create a custom target that depends on the generated version.h file.
+add_custom_target(version_generator ALL DEPENDS "${CMAKE_BINARY_DIR}/version.h")
+
+# Add the build directory to the include path so the generated version.h can be found
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR})
+
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
     src
@@ -81,6 +107,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/atem
     ${ATEM_SDK_INCLUDE_DIR}
 )
+
+# Make sure the version_generator target runs before the main executable is built.
+add_dependencies(${PROJECT_NAME} version_generator)
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE

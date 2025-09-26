@@ -1,0 +1,7 @@
+#pragma once
+
+#include <string_view>
+
+namespace atem::version {
+    constexpr std::string_view GIT_VERSION = "@GIT_VERSION@";
+} // namespace atem::version

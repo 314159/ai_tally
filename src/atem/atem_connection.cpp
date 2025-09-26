@@ -7,7 +7,11 @@ namespace atem {
 
 ATEMConnection::ATEMConnection(uint16_t mock_inputs)
     : mock_input_count_(mock_inputs)
-    , rng_(std::random_device {}())
+    , rng_([&] {
+        std::random_device rd;
+        std::seed_seq ss { rd(), rd(), rd(), rd(), rd(), rd(), rd(), rd() };
+        return std::mt19937(ss);
+    }())
     , last_mock_update_(std::chrono::steady_clock::now())
 {
     init_mock_data();
@@ -31,10 +35,10 @@ bool ATEMConnection::connect(const std::string& ip_address)
         atem_device_->set_callback(this);
         connected_ = true;
         return true;
-    } else {
-        std::cerr << "Could not connect to ATEM switcher." << std::endl;
-        return false;
     }
+
+    std::cerr << "Could not connect to ATEM switcher." << std::endl;
+    return false;
 }
 
 void ATEMConnection::disconnect()

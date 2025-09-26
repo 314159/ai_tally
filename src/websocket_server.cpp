@@ -94,6 +94,10 @@ namespace {
         body.disconnected .input-number {
             animation: fade 2s infinite ease-in-out;
         }
+        /* When disconnected, hide the mock indicator as we don't know the server's future state. */
+        body.disconnected .mock-indicator {
+            display: none;
+        }
     </style>
 </head>
 <body class="off disconnected">

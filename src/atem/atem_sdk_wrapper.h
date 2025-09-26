@@ -30,7 +30,7 @@ namespace atem {
  */
 class ATEMSwitcherCallback {
 public:
-    virtual ~ATEMSwitcherCallback() = default;
+    virtual ~ATEMSwitcherCallback() noexcept = default;
     virtual void on_tally_state_changed(const TallyUpdate& update) = 0;
     virtual void on_disconnected() = 0;
 };
@@ -41,11 +41,11 @@ public:
  */
 class ATEMDevice {
 public:
-    virtual ~ATEMDevice() = default;
+    virtual ~ATEMDevice() noexcept = default;
     virtual bool connect() = 0;
     virtual void disconnect() = 0;
     virtual void poll() = 0;
-    virtual std::string get_product_name() = 0;
+    virtual std::string get_product_name() const = 0;
     virtual void set_callback(ATEMSwitcherCallback* callback) = 0;
 };
 
@@ -55,7 +55,7 @@ public:
  */
 class ATEMDiscovery {
 public:
-    virtual ~ATEMDiscovery() = default;
+    virtual ~ATEMDiscovery() noexcept = default;
     static std::unique_ptr<ATEMDiscovery> create();
     virtual std::unique_ptr<ATEMDevice> connect_to(const std::string& ip_address) = 0;
 };
@@ -76,25 +76,25 @@ class SwitcherCallback
 {
 public:
     SwitcherCallback(atem::ATEMSwitcherCallback* owner);
-    virtual ~SwitcherCallback();
+    ~SwitcherCallback() override;
 
     // IUnknown methods
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID* ppv) override;
-    ULONG STDMETHODCALLTYPE AddRef() override;
-    ULONG STDMETHODCALLTYPE Release() override;
+    ULONG STDMETHODCALLTYPE AddRef() override; // Cannot be noexcept due to Windows headers
+    ULONG STDMETHODCALLTYPE Release() override; // Cannot be noexcept due to Windows headers
 
     // IBMDSwitcherCallback methods
     HRESULT STDMETHODCALLTYPE Notify(BMDSwitcherEventType eventType, BMDSwitcherVideoMode coreVideoMode) override;
 
 private:
     atem::ATEMSwitcherCallback* m_owner;
-    int32_t m_refCount;
+    std::atomic<int32_t> m_refCount;
 };
 
 class MixEffectBlockCallback : public IBMDSwitcherMixEffectBlockCallback {
 public:
     MixEffectBlockCallback(atem::ATEMSwitcherCallback* owner, IBMDSwitcherMixEffectBlock* meBlock);
-    virtual ~MixEffectBlockCallback();
+    ~MixEffectBlockCallback() override;
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID* ppv) override;
     ULONG STDMETHODCALLTYPE AddRef() override;
@@ -105,5 +105,5 @@ public:
 private:
     atem::ATEMSwitcherCallback* m_owner;
     IBMDSwitcherMixEffectBlock* m_meBlock;
-    int32_t m_refCount;
+    std::atomic<int32_t> m_refCount;
 };

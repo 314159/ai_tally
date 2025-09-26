@@ -30,7 +30,7 @@ struct TallyUpdate {
     TallyUpdate& operator=(TallyUpdate&&) = default;
     ~TallyUpdate() = default;
 
-    bool operator==(const TallyUpdate& other) const
+    bool operator==(const TallyUpdate& other) const noexcept
     {
         return input_id == other.input_id && program == other.program && preview == other.preview && mock == other.mock;
     }
@@ -76,7 +76,7 @@ struct TallyState {
     TallyState& operator=(TallyState&&) = default;
     ~TallyState() = default;
 
-    bool operator==(const TallyState& other) const
+    bool operator==(const TallyState& other) const noexcept
     {
         return input_id == other.input_id && program == other.program && preview == other.preview;
     }

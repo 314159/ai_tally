@@ -18,7 +18,7 @@ ATEMConnection::ATEMConnection(uint16_t mock_inputs)
     atem_discovery_ = ATEMDiscovery::create();
 }
 
-ATEMConnection::~ATEMConnection()
+ATEMConnection::~ATEMConnection() noexcept
 {
     disconnect();
 }
@@ -41,7 +41,7 @@ bool ATEMConnection::connect(const std::string& ip_address)
     return false;
 }
 
-void ATEMConnection::disconnect()
+void ATEMConnection::disconnect() noexcept
 {
     connected_ = false;
     if (atem_device_) {
@@ -75,7 +75,7 @@ void ATEMConnection::poll()
     }
 }
 
-void ATEMConnection::set_mock_mode(bool enabled)
+void ATEMConnection::set_mock_mode(bool enabled) noexcept
 {
     mock_mode_ = enabled;
     if (enabled) {

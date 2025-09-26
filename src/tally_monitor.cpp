@@ -17,7 +17,7 @@ TallyMonitor::TallyMonitor(boost::asio::io_context& ioc, const Config& config)
     atem_connection_->set_mock_mode(config_.mock_enabled);
 }
 
-TallyMonitor::~TallyMonitor()
+TallyMonitor::~TallyMonitor() noexcept
 {
     stop();
 }
@@ -47,7 +47,7 @@ void TallyMonitor::start()
     monitor_loop();
 }
 
-void TallyMonitor::stop()
+void TallyMonitor::stop() noexcept
 {
     if (!running_.exchange(false)) {
         return; // Already stopped

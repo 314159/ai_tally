@@ -39,7 +39,7 @@ public:
         // This could be used for periodic health checks if needed.
     }
 
-    std::string get_product_name() override
+    std::string get_product_name() const override
     {
         if (!m_switcher)
             return "Not Connected";
@@ -194,7 +194,7 @@ private:
 
 SwitcherCallback::SwitcherCallback(atem::ATEMSwitcherCallback* owner)
     : m_owner(owner)
-    , m_refCount(1)
+    , m_refCount(1) // atomic
 {
 }
 SwitcherCallback::~SwitcherCallback()
@@ -223,14 +223,14 @@ HRESULT STDMETHODCALLTYPE SwitcherCallback::QueryInterface(REFIID iid, LPVOID* p
 
 ULONG STDMETHODCALLTYPE SwitcherCallback::AddRef()
 {
-    return ++m_refCount;
+    return m_refCount.fetch_add(1) + 1;
 }
 ULONG STDMETHODCALLTYPE SwitcherCallback::Release()
 {
-    ULONG newRef = --m_refCount;
-    if (newRef == 0)
+    ULONG new_ref = m_refCount.fetch_sub(1) - 1;
+    if (new_ref == 0)
         delete this;
-    return newRef;
+    return new_ref;
 }
 
 HRESULT STDMETHODCALLTYPE SwitcherCallback::Notify(BMDSwitcherEventType eventType, BMDSwitcherVideoMode)
@@ -245,7 +245,7 @@ HRESULT STDMETHODCALLTYPE SwitcherCallback::Notify(BMDSwitcherEventType eventTyp
 MixEffectBlockCallback::MixEffectBlockCallback(atem::ATEMSwitcherCallback* owner, IBMDSwitcherMixEffectBlock* meBlock)
     : m_owner(owner)
     , m_meBlock(meBlock)
-    , m_refCount(1)
+    , m_refCount(1) // atomic
 {
     m_meBlock->AddRef();
 }
@@ -275,14 +275,14 @@ HRESULT STDMETHODCALLTYPE MixEffectBlockCallback::QueryInterface(REFIID iid, LPV
 
 ULONG STDMETHODCALLTYPE MixEffectBlockCallback::AddRef()
 {
-    return ++m_refCount;
+    return m_refCount.fetch_add(1) + 1;
 }
 ULONG STDMETHODCALLTYPE MixEffectBlockCallback::Release()
 {
-    ULONG newRef = --m_refCount;
-    if (newRef == 0)
+    ULONG new_ref = m_refCount.fetch_sub(1) - 1;
+    if (new_ref == 0)
         delete this;
-    return newRef;
+    return new_ref;
 }
 
 HRESULT STDMETHODCALLTYPE MixEffectBlockCallback::Notify(BMDSwitcherMixEffectBlockEventType eventType)

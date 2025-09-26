@@ -123,7 +123,7 @@ HttpAndWebSocketSession::HttpAndWebSocketSession(tcp::socket&& socket, const Con
 {
 }
 
-HttpAndWebSocketSession::~HttpAndWebSocketSession()
+HttpAndWebSocketSession::~HttpAndWebSocketSession() noexcept
 {
     std::cout << "WebSocket session destroyed\n";
 }
@@ -137,7 +137,7 @@ void HttpAndWebSocketSession::run()
     net::dispatch(ws_.get_executor(), beast::bind_front_handler(&HttpAndWebSocketSession::do_http_read, shared_from_this()));
 }
 
-void HttpAndWebSocketSession::send(std::string message)
+void HttpAndWebSocketSession::send(const std::string& message)
 {
     // Post the work to the strand to ensure thread safety
     net::post(
@@ -148,10 +148,10 @@ void HttpAndWebSocketSession::send(std::string message)
             std::move(message)));
 }
 
-void HttpAndWebSocketSession::on_send(std::string message)
+void HttpAndWebSocketSession::on_send(const std::string& message)
 {
     // Add the message to the queue
-    queue_.push_back(std::make_shared<const std::string>(std::move(message)));
+    queue_.push_back(std::make_shared<const std::string>(message));
 
     // If there's only one message in the queue, start writing
     if (queue_.size() > 1)
@@ -401,7 +401,7 @@ HttpAndWebSocketServer::HttpAndWebSocketServer(net::io_context& ioc, net::ip::ad
 {
 }
 
-HttpAndWebSocketServer::~HttpAndWebSocketServer()
+HttpAndWebSocketServer::~HttpAndWebSocketServer() noexcept
 {
     stop();
 }
@@ -415,7 +415,7 @@ void HttpAndWebSocketServer::start()
     do_accept();
 }
 
-void HttpAndWebSocketServer::stop()
+void HttpAndWebSocketServer::stop() noexcept
 {
     if (!running_)
         return;

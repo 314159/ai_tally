@@ -23,7 +23,7 @@ class TallyMonitor;
 class HttpAndWebSocketSession final : public std::enable_shared_from_this<HttpAndWebSocketSession> {
 public:
     explicit HttpAndWebSocketSession(tcp::socket&& socket, const Config& config, TallyMonitor& monitor);
-    ~HttpAndWebSocketSession();
+    ~HttpAndWebSocketSession() noexcept;
 
     // Non-copyable, movable
     HttpAndWebSocketSession(const HttpAndWebSocketSession&) = delete;
@@ -32,7 +32,7 @@ public:
     HttpAndWebSocketSession& operator=(HttpAndWebSocketSession&&) = delete;
 
     void run();
-    void send(std::string message);
+    void send(const std::string& message);
     void close();
 
 private:
@@ -40,7 +40,7 @@ private:
     void on_http_read(beast::error_code ec, std::size_t bytes_transferred);
     void handle_http_request(http::request<http::string_body>&& req);
 
-    void on_send(std::string message);
+    void on_send(const std::string& message);
     void on_ws_accept(beast::error_code ec);
     void do_read();
     void on_read(beast::error_code ec, std::size_t bytes_transferred);
@@ -58,7 +58,7 @@ class HttpAndWebSocketServer final {
 public:
     HttpAndWebSocketServer(net::io_context& ioc, tcp::endpoint endpoint, const Config& config, TallyMonitor& monitor);
     HttpAndWebSocketServer(net::io_context& ioc, net::ip::address address, unsigned short port, const Config& config, TallyMonitor& monitor);
-    ~HttpAndWebSocketServer();
+    ~HttpAndWebSocketServer() noexcept;
 
     // Non-copyable, non-movable
     HttpAndWebSocketServer(const HttpAndWebSocketServer&) = delete;
@@ -67,7 +67,7 @@ public:
     HttpAndWebSocketServer& operator=(HttpAndWebSocketServer&&) = delete;
 
     void start();
-    void stop();
+    void stop() noexcept;
     void broadcast_tally_update(const TallyUpdate& update);
 
 private:

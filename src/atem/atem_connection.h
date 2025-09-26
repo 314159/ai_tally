@@ -15,7 +15,7 @@ class ATEMConnection : public ATEMSwitcherCallback {
 public:
     using TallyCallback = std::function<void(const TallyUpdate&)>;
     explicit ATEMConnection(uint16_t mock_inputs = 8);
-    ~ATEMConnection();
+    ~ATEMConnection() noexcept;
 
     // Non-copyable, not movable (Rule of 7)
     ATEMConnection(const ATEMConnection&) = delete;
@@ -24,14 +24,14 @@ public:
     ATEMConnection& operator=(ATEMConnection&&) = delete;
 
     bool connect(const std::string& ip_address);
-    void disconnect();
+    void disconnect() noexcept;
     bool is_connected() const;
 
     void on_tally_change(TallyCallback callback);
     void poll();
 
     // For testing/demo purposes
-    void set_mock_mode(bool enabled);
+    void set_mock_mode(bool enabled) noexcept;
     bool is_mock_mode() const;
 
 private:

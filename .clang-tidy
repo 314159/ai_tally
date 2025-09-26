@@ -7,8 +7,8 @@ Checks: >
   clang-analyzer-*,
   bugprone-*,
   performance-*,
+  modernize-*,
   readability-*
-  # modernize-*,
 
 # Example of disabling a specific check if it's too noisy for your project.
 # For instance, modernize-use-trailing-return-type can be a matter of style.

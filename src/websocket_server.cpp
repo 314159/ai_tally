@@ -58,10 +58,20 @@ namespace {
         .preview { background-color: #00FF00; }
         .program { background-color: #FF0000; }
         .input-number {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
             font-size: 50vmin;
             font-weight: bold;
             color: rgba(255, 255, 255, 0.5);
             text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+        }
+        .mock-indicator {
+            /* Set font size relative to the parent .input-number */
+            font-size: 12.5vmin;
+            /* Adjust vertical position to align better with the large number */
+            position: relative;
+            top: -0.1em; /* Adjust this value as needed */
         }
         .connection-details {
             position: absolute;
@@ -88,7 +98,7 @@ namespace {
 </head>
 <body class="off disconnected">
     <div class="input-number">)"
-            + std::to_string(input_id)
+            + "<span>" + std::to_string(input_id) + "</span>" + (is_mock ? R"(<span class="mock-indicator"> (mock)</span>)" : "")
             + R"(</div>)" + R"(
     <div class="connection-details">
         <span id="server-details"></span> | Status: <span id="connection-status">Connecting...</span>
@@ -147,7 +157,7 @@ namespace {
     }
 
     const serverDetails = `Server version ${serverVersion} @ )"
-            + server_ip + R"(${isMock ? ' (Mock)' : ''}`;
+            + server_ip + R"(`;
     document.getElementById('server-details').textContent = serverDetails;
 
     connect();

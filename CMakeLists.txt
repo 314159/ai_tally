@@ -90,7 +90,8 @@ add_custom_command(
     DEPENDS
         "${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake"
         "${CMAKE_SOURCE_DIR}/src/version.h.in"
-        "${CMAKE_SOURCE_DIR}/.git/logs/HEAD"
+        "${CMAKE_SOURCE_DIR}/.git/logs/HEAD" # Detects commits, checkouts
+        "${CMAKE_SOURCE_DIR}/.git/index"     # Detects staged changes
     COMMENT "Generating version.h from git"
 )
 

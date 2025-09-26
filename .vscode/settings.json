@@ -119,6 +119,9 @@
 	"C_Cpp.codeAnalysis.clangTidy.path": "clang-tidy",
 	"C_Cpp.codeAnalysis.clangTidy.useBuildFolder": false,
 	"C_Cpp.codeAnalysis.run": "onSave",
+	// --- CMake Tools Settings ---
+	// Set the preferred generator to Ninja for faster builds.
+	"cmake.generator": "Ninja",
 	"[cpp]": {
 		"editor.defaultFormatter": "ms-vscode.cpptools"
 	}

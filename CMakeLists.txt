@@ -56,23 +56,79 @@ CPMAddPackage(
     OPTIONS "GSL_INSTALL ON"
 )
 
+# --- wxWidgets Configuration ---
+# This section sets options for the wxWidgets subproject build. We set these as
+# CACHE variables BEFORE calling CPMAddPackage to ensure they are correctly
+# picked up by the wxWidgets build system.
+
+# Core build settings: Build as individual component libraries.
+set(wxBUILD_SHARED OFF CACHE BOOL "Build wxWidgets as a static library")
+set(wxBUILD_SAMPLES OFF CACHE BOOL "Do not build wxWidgets samples")
+set(wxBUILD_MONOLITHIC OFF CACHE BOOL "Build wxWidgets as individual libraries")
+set(wxUSE_GUI ON CACHE BOOL "Enable wxWidgets GUI components")
+
+# Disable precompiled headers to ensure wxBUILD_LIBS is respected.
+set(wxBUILD_PRECOMP OFF CACHE BOOL "Do not use precompiled headers")
+
+# Suppress the -Wdeprecated-copy warning from wxWidgets headers, which causes
+# build failures when -Werror is enabled. This flag is appended only to the
+# wxWidgets build, not the main project.
+set(wxCXX_FLAGS "-Wno-deprecated-copy" CACHE STRING "Extra flags for wxWidgets build")
+
+# Platform-specific settings
+if(APPLE)
+    # On macOS, we must disable memset_s to prevent a link error with v3.2.8
+    # and explicitly enable iconv for character set conversion.
+    set(HAVE_MEMSET_S OFF CACHE BOOL "Disable buggy memset_s on macOS")
+    set(wxUSE_ICONV ON CACHE BOOL "Enable iconv for character set conversion")
+    CPMAddPackage(NAME wxWidgets
+        GITHUB_REPOSITORY wxWidgets/wxWidgets
+        GIT_TAG v3.2.8
+        PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wxwidgets-v3.2.8-macos-memset_s.patch"
+    )
+else()
+    CPMAddPackage(NAME wxWidgets
+        GITHUB_REPOSITORY wxWidgets/wxWidgets
+        GIT_TAG v3.2.8
+    )
+endif()
+
 # Add ATEM SDK (mock implementation for this example)
 set(ATEM_SDK_SOURCES
-    src/atem/atem_connection.cpp
-    src/atem/tally_state.cpp
-    src/atem/atem_sdk_wrapper.cpp
+    ${CMAKE_SOURCE_DIR}/src/atem/atem_connection.cpp
+    ${CMAKE_SOURCE_DIR}/src/atem/tally_state.cpp
+    ${CMAKE_SOURCE_DIR}/src/atem/atem_sdk_wrapper.cpp
 )
 
-# Main executable
-add_executable(${PROJECT_NAME}
-    src/config.cpp
-    src/main.cpp
-    src/websocket_server.cpp
-    src/tally_monitor.cpp
+set(GUI_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/gui/App.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui/MainFrame.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui/PreferencesDialog.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui/TallyPanel.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui/BackendService.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui/mock_tally_provider.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui/atem_tally_provider.cpp
+)
+
+# Consolidate all source files into a single list
+set(APP_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/config.cpp
+    ${CMAKE_SOURCE_DIR}/src/main.cpp
+    ${CMAKE_SOURCE_DIR}/src/websocket_server.cpp
+    ${CMAKE_SOURCE_DIR}/src/tally_monitor.cpp
     ${ATEM_SDK_SOURCES}
+    ${GUI_SOURCES}
     ${ATEM_SDK_DISPATCH_SRC}
     ${PLATFORM_SOURCES}
 )
+
+# Main executable
+add_executable(${PROJECT_NAME} ${APP_SOURCES})
+
+# By default, CMake doesn't treat include directories from imported targets
+# as SYSTEM includes. Setting this property to OFF changes that behavior,
+# which will suppress compiler warnings from third-party libraries like wxWidgets.
+set_property(TARGET ${PROJECT_NAME} PROPERTY NO_SYSTEM_FROM_IMPORTED OFF)
 
 # Find Git executable for use in the custom command
 find_package(Git REQUIRED)
@@ -98,15 +154,14 @@ add_custom_command(
 # Create a custom target that depends on the generated version.h file.
 add_custom_target(version_generator ALL DEPENDS "${CMAKE_BINARY_DIR}/version.h")
 
-# Add the build directory to the include path so the generated version.h can be found
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR})
-
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
     src
     src/platform
     src/atem
+    src/gui
     ${ATEM_SDK_INCLUDE_DIR}
+    ${CMAKE_BINARY_DIR} # For the generated version.h
 )
 
 # Make sure the version_generator target runs before the main executable is built.
@@ -121,15 +176,35 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Boost::chrono
     Boost::json
     Boost::program_options
-    GSL
-    ${PLATFORM_LIBS}
+    GSL # GSL might need to be linked before wxWidgets on some platforms
+    # Link against the individual wxWidgets component targets. This automatically
+    # handles include directories, compile definitions, and library files.
+    # wx::core and wx::base are automatically included as dependencies of wx::adv
+    wx::adv  # For advanced controls like wxSpinCtrl
 )
+
+# On Windows, create a windowed application instead of a console one
+if(WIN32)
+    set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE ON)
+    # Define for static linking of wxWidgets on Windows
+    # This is crucial for the wx headers to correctly include setup.h
+    # and see definitions like wxUSE_VALIDATORS.
+    target_compile_definitions(${PROJECT_NAME} PRIVATE wxMSW_STATIC_LIB)
+endif()
 
 # Compiler-specific options
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+# For non-MSVC compilers, specifically disable the -Wdeprecated-copy warning
+# for the GUI source files. This prevents build failures caused by wxWidgets
+# headers when -Werror is active, without affecting the rest of the project.
+if(NOT MSVC)
+    set_source_files_properties(${GUI_SOURCES} PROPERTIES
+        COMPILE_FLAGS "-Wno-deprecated-copy")
 endif()
 
 # Enable Clang-Tidy for static analysis

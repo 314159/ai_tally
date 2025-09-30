@@ -21,6 +21,9 @@ struct Config {
 
     // Load configuration from a JSON file
     void load_from_file(gsl::czstring filename);
+
+    // Save the current configuration to a JSON file
+    void save_to_file(gsl::czstring filename) const;
 };
 
 } // namespace atem

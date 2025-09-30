@@ -1,5 +1,6 @@
 #include "config.h"
 #include <boost/json.hpp>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
@@ -63,6 +64,42 @@ void Config::load_from_file(gsl::czstring filename)
     if (mock_inputs == 0) {
         std::cerr << "Warning: mock_mode.num_inputs is 0; defaulting to 8\n";
         mock_inputs = 8;
+    }
+}
+
+void Config::save_to_file(gsl::czstring filename) const
+{
+    boost::json::object root;
+
+    root["websocket"] = { { "address", ws_address }, { "port", ws_port } };
+    root["atem"] = { { "ip_address", atem_ip } };
+    root["mock_mode"] = { { "enabled", mock_enabled },
+        { "update_interval_ms", mock_update_interval_ms },
+        { "num_inputs", mock_inputs } };
+
+    // Safely write to a temporary file first, then rename.
+    // This prevents file corruption if the write is interrupted.
+    const std::filesystem::path final_path(filename);
+    const std::filesystem::path temp_path = std::filesystem::path(filename).concat(".tmp");
+
+    try {
+        // Ensure the directory exists.
+        if (final_path.has_parent_path()) {
+            std::filesystem::create_directories(final_path.parent_path());
+        }
+
+        std::ofstream temp_file(temp_path, std::ios::binary | std::ios::trunc);
+        if (!temp_file) {
+            throw std::runtime_error("Could not open temporary config file for writing.");
+        }
+
+        temp_file << root;
+        temp_file.close();
+
+        // Atomically (on most platforms) replace the old file with the new one.
+        std::filesystem::rename(temp_path, final_path);
+    } catch (const std::exception& e) {
+        std::cerr << "Error: Could not write to config file '" << filename << "': " << e.what() << std::endl;
     }
 }
 

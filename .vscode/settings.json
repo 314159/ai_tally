@@ -101,7 +101,13 @@
 		"valarray": "cpp",
 		"variant": "cpp",
 		"vector": "cpp",
-		"algorithm": "cpp"
+		"algorithm": "cpp",
+		"barrier": "cpp",
+		"latch": "cpp",
+		"numbers": "cpp",
+		"scoped_allocator": "cpp",
+		"semaphore": "cpp",
+		"pointers": "cpp"
 	},
 	"editor.formatOnSave": true,
 	"files.trimTrailingWhitespace": true,

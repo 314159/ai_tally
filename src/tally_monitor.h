@@ -9,6 +9,8 @@
 #include <functional>
 #include <memory>
 #include <thread>
+#include <unordered_map>
+#include <vector>
 
 namespace atem {
 

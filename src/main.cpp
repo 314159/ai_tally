@@ -8,6 +8,8 @@
 #include <gsl/gsl>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <vector>
 #include <thread>
 
 namespace po = boost::program_options;
@@ -53,8 +55,8 @@ int main(int argc, char** argv)
             "Number of inputs to show in mock mode");
 
         po::variables_map vm;
-        const gsl::span<char*> args(argv, argc);
-        po::store(po::command_line_parser(argc, args.data()).options(desc).run(), vm);
+        const std::vector<std::string> args(argv, argv + argc);
+        po::store(po::command_line_parser(args).options(desc).run(), vm);
         po::notify(vm);
 
         if (vm.count("help")) {
@@ -67,7 +69,7 @@ int main(int argc, char** argv)
         if (vm.count("config") && vm["config"].as<std::string>() != "config/server_config.json") {
             config.load_from_file(config_file.c_str());
             // Re-apply command line arguments to override the new file's settings
-            po::store(po::command_line_parser(argc, args.data()).options(desc).run(), vm);
+            po::store(po::command_line_parser(args).options(desc).run(), vm);
             po::notify(vm);
         }
 
@@ -80,7 +82,7 @@ int main(int argc, char** argv)
         auto monitor = std::make_unique<atem::TallyMonitor>(io_context, config);
 
         // Create server
-        auto server = std::make_unique<atem::HttpAndWebSocketServer>(io_context, address, port, config, *monitor);
+        auto server = std::make_unique<atem::HttpAndWebSocketServer>(io_context, address, port, config, gsl::make_not_null(monitor.get()));
 
         // Connect tally updates to websocket broadcasts and TUI
         monitor->on_tally_change([&server](const atem::TallyUpdate& update) {

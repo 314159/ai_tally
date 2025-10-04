@@ -22,17 +22,17 @@ class TallyMonitor;
 
 class HttpAndWebSocketSession final : public std::enable_shared_from_this<HttpAndWebSocketSession> {
 public:
-    explicit HttpAndWebSocketSession(tcp::socket&& socket, const Config& config, TallyMonitor& monitor);
+    explicit HttpAndWebSocketSession(tcp::socket&& socket, const Config& config, gsl::not_null<TallyMonitor*> monitor);
     ~HttpAndWebSocketSession() noexcept;
 
     // Non-copyable, movable
     HttpAndWebSocketSession(const HttpAndWebSocketSession&) = delete;
     HttpAndWebSocketSession& operator=(const HttpAndWebSocketSession&) = delete;
-    HttpAndWebSocketSession(HttpAndWebSocketSession&&) = default;
+    HttpAndWebSocketSession(HttpAndWebSocketSession&&) = delete;
     HttpAndWebSocketSession& operator=(HttpAndWebSocketSession&&) = delete;
 
     void run();
-    void send(const std::string& message);
+    void send(std::shared_ptr<const std::string> message);
     void close();
 
 private:
@@ -40,7 +40,7 @@ private:
     void on_http_read(beast::error_code ec, std::size_t bytes_transferred);
     void handle_http_request(http::request<http::string_body>&& req);
 
-    void on_send(const std::string& message);
+    void on_send(std::shared_ptr<const std::string> message);
     void on_ws_accept(beast::error_code ec);
     void do_read();
     void on_read(beast::error_code ec, std::size_t bytes_transferred);
@@ -56,8 +56,8 @@ private:
 
 class HttpAndWebSocketServer final {
 public:
-    HttpAndWebSocketServer(net::io_context& ioc, tcp::endpoint endpoint, const Config& config, TallyMonitor& monitor);
-    HttpAndWebSocketServer(net::io_context& ioc, net::ip::address address, unsigned short port, const Config& config, TallyMonitor& monitor);
+    HttpAndWebSocketServer(net::io_context& ioc, tcp::endpoint endpoint, const Config& config, gsl::not_null<TallyMonitor*> monitor);
+    HttpAndWebSocketServer(net::io_context& ioc, net::ip::address address, unsigned short port, const Config& config, gsl::not_null<TallyMonitor*> monitor);
     ~HttpAndWebSocketServer() noexcept;
 
     // Non-copyable, non-movable

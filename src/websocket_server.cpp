@@ -42,7 +42,7 @@ namespace {
     }
 
     // Generates a full-screen tally client page for a specific input
-    std::string generate_tally_page(int input_id, bool is_mock, const std::string& server_ip)
+    std::string generate_tally_page(int input_id, bool is_mock, const std::string& server_ip, const std::string& sdk_version)
     {
         return R"(
 <!DOCTYPE html>
@@ -114,6 +114,9 @@ namespace {
             + (is_mock ? "true" : "false") + R"(;
     const serverVersion = ")"
             + std::string(version::GIT_VERSION) + R"(";)" + R"(
+    const sdkVersion = ")"
+            + sdk_version + R"(";
+)" + R"(
     let ws;
 
     function connect() {
@@ -136,6 +139,12 @@ namespace {
                     document.body.className = 'preview';
                 } else {
                     document.body.className = 'off';
+                }
+            } else if (data.type === 'welcome') {
+                // Update SDK version from server's welcome message
+                if (data.sdk_version && data.sdk_version !== sdkVersion) {
+                    // This is unlikely to change without a server restart, but good practice.
+                    location.reload();
                 }
             } else if (data.type === 'mode_change') {
                 if (data.mock !== isMock) {
@@ -160,7 +169,7 @@ namespace {
         };
     }
 
-    const serverDetails = `Server version ${serverVersion} @ )"
+    const serverDetails = `Server ${serverVersion} (SDK ${sdkVersion}) @ )"
             + server_ip + R"(`;
     document.getElementById('server-details').textContent = serverDetails;
 
@@ -262,6 +271,7 @@ void HttpAndWebSocketSession::on_ws_accept(beast::error_code ec)
     boost::json::object welcome_msg;
     welcome_msg["type"] = "welcome";
     welcome_msg["message"] = "Connected to ATEM Tally Server";
+    welcome_msg["sdk_version"] = ATEM_SDK_VERSION;
 
     // Also send the current mode status immediately on connection
     boost::json::object mode_msg;
@@ -408,7 +418,7 @@ void HttpAndWebSocketSession::handle_http_request(http::request<http::string_bod
             std::string id_str = std::string(req.target().substr(7));
             int id = std::stoi(id_str);
             std::string server_ip = beast::get_lowest_layer(ws_).socket().local_endpoint().address().to_string();
-            res.body() = generate_tally_page(id, monitor_.is_mock_mode(), server_ip);
+            res.body() = generate_tally_page(id, monitor_.is_mock_mode(), server_ip, ATEM_SDK_VERSION);
         } catch (const std::exception&) {
             auto res = bad_request("Invalid tally ID");
             auto sp = std::make_shared<http::response<http::string_body>>(std::move(res));

@@ -27,6 +27,15 @@ endif()
 list(GET BMD_SDK_DIRS 0 BMD_SDK_DIR)
 message(STATUS "Found ATEM SDK at: ${BMD_SDK_DIR}")
 
+# Extract the version from the directory name to pass to the application
+if(BMD_SDK_DIR MATCHES "Blackmagic ATEM Switchers SDK ([0-9.]+.*)$")
+    set(ATEM_SDK_VERSION "${CMAKE_MATCH_1}")
+    message(STATUS "Found ATEM SDK Version: ${ATEM_SDK_VERSION}")
+else()
+    set(ATEM_SDK_VERSION "unknown")
+    message(WARNING "Could not determine ATEM SDK version from directory name: ${BMD_SDK_DIR}")
+endif()
+
 # Platform detection
 if(WIN32)
     set(PLATFORM_SOURCES src/platform/windows_platform.cpp)
@@ -109,6 +118,9 @@ add_custom_target(version_generator ALL DEPENDS "${CMAKE_BINARY_DIR}/version.h")
 
 # Add the build directory to the include path so the generated version.h can be found
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR})
+
+# Pass the ATEM SDK version to the source code as a preprocessor definition
+target_compile_definitions(${PROJECT_NAME} PRIVATE ATEM_SDK_VERSION="${ATEM_SDK_VERSION}")
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE

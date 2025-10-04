@@ -14,6 +14,10 @@ namespace po = boost::program_options;
 
 int main(int argc, char** argv)
 {
+    // Display application and SDK version info at startup
+    std::cout << "ATEM Tally WebSocket Server\n"
+              << "Using Blackmagic ATEM SDK Version: " << ATEM_SDK_VERSION << std::endl;
+
     // Ensure platform cleanup is always called on exit
     auto cleanup_guard = gsl::finally([] { platform::cleanup(); });
 
@@ -54,7 +58,7 @@ int main(int argc, char** argv)
         po::notify(vm);
 
         if (vm.count("help")) {
-            std::cout << "ATEM Tally WebSocket Server\n"
+            std::cout << "\n"
                       << desc << "\n";
             return 0;
         }

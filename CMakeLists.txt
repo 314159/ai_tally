@@ -5,32 +5,41 @@ project(ATEMTallyServer VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(BMD_SDK_VERSION "10.0")
-
 # Add this to handle COM interface definitions properly
 if(MSVC)
     add_definitions(-D_WIN32_DCOM)
 endif()
-
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Include CPM for dependency management
 include(cmake/CPM.cmake)
 
+# --- Blackmagic ATEM SDK ---
+# Find the SDK directory automatically to avoid hardcoding the version.
+file(GLOB BMD_SDK_DIRS LIST_DIRECTORIES true "${CMAKE_SOURCE_DIR}/Blackmagic ATEM Switchers SDK *")
+
+if(NOT BMD_SDK_DIRS)
+    message(FATAL_ERROR "Blackmagic ATEM Switchers SDK directory not found in project root. Expected directory pattern: 'Blackmagic ATEM Switchers SDK <version>'")
+endif()
+
+# In case multiple versions are present, use the first one found.
+list(GET BMD_SDK_DIRS 0 BMD_SDK_DIR)
+message(STATUS "Found ATEM SDK at: ${BMD_SDK_DIR}")
+
 # Platform detection
 if(WIN32)
     set(PLATFORM_SOURCES src/platform/windows_platform.cpp)
     # Add Ole32.lib for COM
     set(PLATFORM_LIBS ws2_32 wsock32 ole32)
-    set(ATEM_SDK_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/Blackmagic ATEM Switchers SDK ${BMD_SDK_VERSION}/Windows/include")
+    set(ATEM_SDK_INCLUDE_DIR "${BMD_SDK_DIR}/Windows/include")
     set(ATEM_SDK_DISPATCH_SRC "")
 elseif(APPLE)
     set(PLATFORM_SOURCES src/platform/macos_platform.cpp)
     # Add CoreFoundation for CFStringRef etc.
     set(PLATFORM_LIBS "-framework CoreFoundation")
-    set(ATEM_SDK_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/Blackmagic ATEM Switchers SDK ${BMD_SDK_VERSION}/Mac OS X/include")
-    set(ATEM_SDK_DISPATCH_SRC "${CMAKE_SOURCE_DIR}/Blackmagic ATEM Switchers SDK ${BMD_SDK_VERSION}/Mac OS X/include/BMDSwitcherAPIDispatch.cpp")
+    set(ATEM_SDK_INCLUDE_DIR "${BMD_SDK_DIR}/Mac OS X/include")
+    set(ATEM_SDK_DISPATCH_SRC "${BMD_SDK_DIR}/Mac OS X/include/BMDSwitcherAPIDispatch.cpp")
     # Set the macOS deployment target to ensure modern APIs are available.
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
 else()

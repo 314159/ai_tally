@@ -32,8 +32,9 @@ int main(int argc, char** argv)
         }
 
         // --- Configuration ---
-        atem::Config config;
-        std::string config_file = "config/server_config.json";
+        auto config = atem::Config();
+        const auto default_config_file = std::string("config/server_config.json");
+        auto config_file = default_config_file;
 
         // Load from file first
         config.load_from_file(config_file.c_str());
@@ -67,7 +68,7 @@ int main(int argc, char** argv)
         }
 
         // Re-load from file if a different one was specified on the command line
-        if (vm.count("config") && vm["config"].as<std::string>() != "config/server_config.json") {
+        if (vm.count("config") && vm["config"].as<std::string>() != default_config_file) {
             config.load_from_file(config_file.c_str());
             // Re-apply command line arguments to override the new file's settings
             po::store(po::command_line_parser(args).options(desc).run(), vm);

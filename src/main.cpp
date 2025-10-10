@@ -22,7 +22,7 @@ int main(int argc, char** argv)
               << "Using Blackmagic ATEM SDK Version: " << ATEM_SDK_VERSION << "\n";
 
     // Ensure platform cleanup is always called on exit
-    auto cleanup_guard = gsl::finally([] { platform::cleanup(); });
+    auto _ = gsl::finally([] { platform::cleanup(); });
 
     try {
         // Initialize platform-specific code
@@ -40,7 +40,7 @@ int main(int argc, char** argv)
 
         // Then, define and parse command-line options.
         // These will override the file settings.
-        po::options_description desc("Allowed options");
+        auto desc = po::options_description("Allowed options");
         desc.add_options()("help,h", "produce help message")(
             "config,c",
             po::value<std::string>(&config_file)->default_value(config_file),
@@ -55,8 +55,8 @@ int main(int argc, char** argv)
             "mock-inputs", po::value<uint16_t>(&config.mock_inputs)->default_value(config.mock_inputs),
             "Number of inputs to show in mock mode");
 
-        po::variables_map vm;
-        const std::vector<std::string> args(argv, argv + argc);
+        auto vm = po::variables_map();
+        const const auto args = std::vector<std::string>(argv, argv + argc);
         po::store(po::command_line_parser(args).options(desc).run(), vm);
         po::notify(vm);
 
@@ -75,9 +75,9 @@ int main(int argc, char** argv)
         }
 
         // --- Service Setup ---
-        boost::asio::io_context io_context;
+        auto io_context = boost::asio::io_context();
         const auto address = boost::asio::ip::make_address(config.ws_address);
-        const unsigned short port = config.ws_port;
+        const auto port = config.ws_port;
 
         // Create tally monitor
         auto monitor = std::make_unique<atem::TallyMonitor>(io_context, config);
@@ -99,20 +99,20 @@ int main(int argc, char** argv)
         auto work_guard = boost::asio::make_work_guard(io_context);
 
         // Run the io_context in its own thread for server operations
-        std::thread server_thread([&io_context]() {
+        auto server_thread = std::thread([&io_context]() {
             io_context.run();
             std::cout << "Server thread finished." << std::endl;
         });
 
-        std::promise<void> server_ready_promise;
-        std::future<void> server_ready_future = server_ready_promise.get_future();
+        auto server_ready_promise = std::promise<void>();
+        auto server_ready_future = server_ready_promise.get_future();
         monitor->on_ready([&server_ready_promise]() {
             server_ready_promise.set_value();
         });
         // Start the monitor first and wait for it to be ready.
 
         // Setup signal handling for graceful shutdown
-        boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
+        auto signals = boost::asio::signal_set(io_context, SIGINT, SIGTERM);
         signals.async_wait([&](const boost::system::error_code&, int) {
             // Stop the io_context. This will cause io_context.run() to return.
             io_context.stop();

@@ -150,7 +150,7 @@ void TallyMonitor::monitor_loop()
 
 void TallyMonitor::handle_tally_change(const TallyUpdate& update)
 {
-    TallyState new_state {
+    auto new_state = TallyState {
         update.input_id,
         update.program,
         update.preview,

@@ -63,7 +63,7 @@ CPMAddPackage(
     GIT_TAG boost-1.89.0 # Or the specific tag for 1.89.0
     OPTIONS
         "BOOST_ENABLE_CMAKE ON"
-        "BOOST_INCLUDE_LIBRARIES beast\\\;asio\\\;system\\\;thread\\\;chrono\\\;json\\\;program_options"
+        "BOOST_INCLUDE_LIBRARIES beast\\\;asio\\\;system\\\;thread\\\;chrono\\\;json\\\;program_options\\\;coroutine"
 )
 
 # Find or fetch Microsoft's GSL (Guideline Support Library)
@@ -120,7 +120,12 @@ add_custom_target(version_generator ALL DEPENDS "${CMAKE_BINARY_DIR}/version.h")
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR})
 
 # Pass the ATEM SDK version to the source code as a preprocessor definition
-target_compile_definitions(${PROJECT_NAME} PRIVATE ATEM_SDK_VERSION="${ATEM_SDK_VERSION}")
+target_compile_definitions(
+    ${PROJECT_NAME}
+    PRIVATE
+    ATEM_SDK_VERSION="${ATEM_SDK_VERSION}"
+    # BOOST_ASIO_ENABLE_HANDLER_TRACKING=1 # Enable Boost.Asio handler tracking for debugging
+    )
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -142,6 +147,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Boost::chrono
     Boost::json
     Boost::program_options
+    Boost::coroutine
     GSL
     ${PLATFORM_LIBS}
 )

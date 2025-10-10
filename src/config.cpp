@@ -2,6 +2,7 @@
 #include <boost/json.hpp>
 #include <fstream>
 #include <iostream>
+#include <optional>
 
 namespace atem {
 
@@ -22,37 +23,39 @@ void Config::load_from_file(gsl::czstring filename)
         return;
     }
 
+    // Helper to safely get a value from a JSON object
+    auto get_value = [](const boost::json::object& obj, const char* key) -> std::optional<boost::json::value> {
+        if (obj.contains(key)) {
+            return obj.at(key);
+        }
+        return std::nullopt;
+    };
+
     try {
         const auto& root = jv.as_object();
 
-        if (root.if_contains("websocket") && jv.at("websocket").is_object()) {
-            const auto& ws = jv.at("websocket").as_object();
-            if (ws.contains("address")) {
-                ws_address = boost::json::value_to<std::string>(ws.at("address"));
-            }
-            if (ws.contains("port")) {
-                ws_port = static_cast<unsigned short>(ws.at("port").as_int64());
-            }
+        if (auto ws_val = get_value(root, "websocket"); ws_val && ws_val->is_object()) {
+            const auto& ws = ws_val->as_object();
+            if (auto addr = get_value(ws, "address"))
+                ws_address = boost::json::value_to<std::string>(*addr);
+            if (auto port = get_value(ws, "port"))
+                ws_port = static_cast<unsigned short>(port->as_int64());
         }
 
-        if (root.if_contains("atem") && jv.at("atem").is_object()) {
-            const auto& a = jv.at("atem").as_object();
-            if (a.contains("ip_address")) {
-                atem_ip = boost::json::value_to<std::string>(a.at("ip_address"));
-            }
+        if (auto atem_val = get_value(root, "atem"); atem_val && atem_val->is_object()) {
+            const auto& a = atem_val->as_object();
+            if (auto ip = get_value(a, "ip_address"))
+                atem_ip = boost::json::value_to<std::string>(*ip);
         }
 
-        if (root.if_contains("mock_mode") && jv.at("mock_mode").is_object()) {
-            const auto& mm = jv.at("mock_mode").as_object();
-            if (mm.if_contains("enabled")) {
-                mock_enabled = mm.at("enabled").as_bool();
-            }
-            if (mm.if_contains("update_interval_ms")) {
-                mock_update_interval_ms = static_cast<unsigned int>(mm.at("update_interval_ms").as_int64());
-            }
-            if (mm.if_contains("num_inputs")) {
-                mock_inputs = static_cast<uint16_t>(mm.at("num_inputs").as_int64());
-            }
+        if (auto mock_val = get_value(root, "mock_mode"); mock_val && mock_val->is_object()) {
+            const auto& mm = mock_val->as_object();
+            if (auto enabled = get_value(mm, "enabled"))
+                mock_enabled = enabled->as_bool();
+            if (auto interval = get_value(mm, "update_interval_ms"))
+                mock_update_interval_ms = static_cast<unsigned int>(interval->as_int64());
+            if (auto num = get_value(mm, "num_inputs"))
+                mock_inputs = static_cast<uint16_t>(num->as_int64());
         }
 
     } catch (const std::exception& e) {

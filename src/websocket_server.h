@@ -2,6 +2,7 @@
 
 #include "tally_state.h"
 #include <boost/asio.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <deque>
@@ -31,24 +32,27 @@ public:
     HttpAndWebSocketSession(HttpAndWebSocketSession&&) = delete;
     HttpAndWebSocketSession& operator=(HttpAndWebSocketSession&&) = delete;
 
-    void run();
+    void start();
     void send(std::shared_ptr<const std::string> message);
     void close();
+    auto get_strand()
+    {
+        return strand_;
+    }
 
 private:
-    void do_http_read();
-    void on_http_read(beast::error_code ec, std::size_t bytes_transferred);
+    boost::asio::awaitable<void> run();
+    boost::asio::awaitable<void> reader();
+    boost::asio::awaitable<void> writer();
+    void send_json(const boost::json::value& jv);
     void handle_http_request(http::request<http::string_body>&& req);
-
-    void on_send(std::shared_ptr<const std::string> message);
-    void on_ws_accept(beast::error_code ec);
-    void do_read();
-    void on_read(beast::error_code ec, std::size_t bytes_transferred);
-    void on_write(beast::error_code ec, std::size_t bytes_transferred);
 
     websocket::stream<beast::tcp_stream> ws_;
     beast::flat_buffer buffer_;
+    net::strand<net::any_io_executor> strand_;
     std::deque<std::shared_ptr<const std::string>> queue_;
+    net::steady_timer writer_timer_;
+    std::string remote_endpoint_str_;
     boost::optional<http::request_parser<http::string_body>> http_parser_;
     const Config& config_;
     TallyMonitor& monitor_;
@@ -74,6 +78,7 @@ public:
 private:
     void do_accept();
     void on_accept(beast::error_code ec, tcp::socket socket);
+    void broadcast(const std::shared_ptr<const std::string>& message);
 
     net::io_context& ioc_;
     tcp::acceptor acceptor_;

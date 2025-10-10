@@ -33,14 +33,8 @@ int main(int argc, char** argv)
 
         // --- Configuration ---
         auto config = atem::Config();
-        const auto default_config_file = std::string("config/server_config.json");
-        auto config_file = default_config_file;
+        auto config_file = std::string("config/server_config.json");
 
-        // Load from file first
-        config.load_from_file(config_file.c_str());
-
-        // Then, define and parse command-line options.
-        // These will override the file settings.
         auto desc = po::options_description("Allowed options");
         desc.add_options()("help,h", "produce help message")(
             "config,c",
@@ -57,7 +51,7 @@ int main(int argc, char** argv)
             "Number of inputs to show in mock mode");
 
         auto vm = po::variables_map();
-        const const auto args = std::vector<std::string>(argv, argv + argc);
+        const auto args = std::vector<std::string>(argv, argv + argc);
         po::store(po::command_line_parser(args).options(desc).run(), vm);
         po::notify(vm);
 
@@ -67,13 +61,9 @@ int main(int argc, char** argv)
             return 0;
         }
 
-        // Re-load from file if a different one was specified on the command line
-        if (vm.count("config") && vm["config"].as<std::string>() != default_config_file) {
-            config.load_from_file(config_file.c_str());
-            // Re-apply command line arguments to override the new file's settings
-            po::store(po::command_line_parser(args).options(desc).run(), vm);
-            po::notify(vm);
-        }
+        // Load from the specified config file, then re-apply command-line args to ensure they override.
+        config.load_from_file(config_file.c_str());
+        po::notify(vm); // This applies the command-line values over the file values.
 
         // --- Service Setup ---
         auto io_context = boost::asio::io_context();
@@ -87,13 +77,13 @@ int main(int argc, char** argv)
         auto server = std::make_unique<atem::HttpAndWebSocketServer>(io_context, address, port, config, gsl::make_not_null(monitor.get()));
 
         // Connect tally updates to websocket broadcasts and TUI
-        monitor->on_tally_change([&server](const atem::TallyUpdate& update) {
-            server->broadcast_tally_update(update);
+        monitor->on_tally_change([server_ptr = server.get()](const atem::TallyUpdate& update) {
+            server_ptr->broadcast_tally_update(update);
         });
 
         // Connect mode changes to websocket broadcasts
-        monitor->on_mode_change([&server](bool is_mock) {
-            server->broadcast_mode_change(is_mock);
+        monitor->on_mode_change([server_ptr = server.get()](bool is_mock) {
+            server_ptr->broadcast_mode_change(is_mock);
         });
 
         // Keep the io_context running until it's explicitly stopped.
@@ -105,37 +95,22 @@ int main(int argc, char** argv)
             std::cout << "Server thread finished." << std::endl;
         });
 
-        auto server_ready_promise = std::promise<void>();
-        auto server_ready_future = server_ready_promise.get_future();
-        monitor->on_ready([&server_ready_promise]() {
-            server_ready_promise.set_value();
-        });
-        // Start the monitor first and wait for it to be ready.
-
         // Setup signal handling for graceful shutdown
         auto signals = boost::asio::signal_set(io_context, SIGINT, SIGTERM);
-        signals.async_wait([&](const boost::system::error_code&, int) {
-            // Stop the io_context. This will cause io_context.run() to return.
-            io_context.stop();
+        signals.async_wait([&server, &monitor, &work_guard, &signals](const boost::system::error_code&, int) {
+            std::cout << "\nSignal received, shutting down gracefully...\n";
+            server->stop();
+            monitor->stop();
+
+            // Cancel the signal handler to remove it from the io_context's work queue.
+            signals.cancel();
+            work_guard.reset(); // Allow io_context.run() to exit
         });
 
         monitor->start();
-        server_ready_future.wait();
-
-        // Start the server
         server->start();
 
-        // The main thread will now block here until a signal is received.
-        server_thread.join();
-        // --- Shutdown ---
-        std::cout << "Shutting down server..." << std::endl;
-        if (server)
-            server->stop();
-        if (monitor)
-            monitor->stop();
-
-        // Allow the io_context to stop by resetting the work guard.
-        work_guard.reset();
+        // The main thread will now block here until the server_thread has finished.
         if (server_thread.joinable()) {
             server_thread.join();
         }

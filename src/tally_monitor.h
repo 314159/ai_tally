@@ -6,6 +6,7 @@
 #include "tally_state.h"
 #include <atomic>
 #include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
 #include <functional>
 #include <memory>
 #include <thread>
@@ -47,7 +48,7 @@ public:
     bool is_mock_mode() const;
 
 private:
-    void monitor_loop();
+    boost::asio::awaitable<void> monitor_loop();
     void handle_tally_change(const TallyUpdate& update);
     void notify_mode_change(bool is_mock);
 

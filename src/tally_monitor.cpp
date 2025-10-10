@@ -1,6 +1,9 @@
 #include "config.h"
 
 #include "tally_monitor.h"
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <chrono>
 #include <iostream>
 
@@ -44,7 +47,14 @@ void TallyMonitor::start()
     atem_connection_->on_tally_change([this](const TallyUpdate& update) { handle_tally_change(update); });
 
     // Start monitoring loop
-    monitor_loop();
+    boost::asio::co_spawn(ioc_, [this] { return monitor_loop(); }, [](std::exception_ptr e) {
+            if (e) {
+                try {
+                    std::rethrow_exception(e);
+                } catch (const std::exception& ex) {
+                    std::cerr << "TallyMonitor::monitor_loop coroutine threw an exception: " << ex.what() << std::endl;
+                }
+            } });
 }
 
 void TallyMonitor::stop() noexcept
@@ -129,38 +139,37 @@ bool TallyMonitor::is_mock_mode() const
     return atem_connection_ ? atem_connection_->is_mock_mode() : false;
 }
 
-void TallyMonitor::monitor_loop()
+boost::asio::awaitable<void> TallyMonitor::monitor_loop()
 {
-    if (!running_) {
-        return;
-    }
+    while (running_) {
+        // Poll ATEM connection for updates
+        if (atem_connection_) {
+            atem_connection_->poll();
+        }
 
-    // Poll ATEM connection for updates
-    if (atem_connection_) {
-        atem_connection_->poll();
+        // Schedule next poll
+        monitor_timer_->expires_after(16ms); // ~60fps polling rate
+        try {
+            co_await monitor_timer_->async_wait(boost::asio::use_awaitable);
+        } catch (const boost::system::system_error& e) {
+            // This is expected on shutdown when the timer is cancelled.
+            if (e.code() != boost::asio::error::operation_aborted)
+                throw;
+        }
     }
-
-    // Schedule next poll
-    monitor_timer_->expires_after(16ms); // ~60fps polling rate
-    monitor_timer_->async_wait([this](boost::system::error_code ec) {
-        if (!ec && running_) {
-            monitor_loop();
-        } });
+    co_return;
 }
 
 void TallyMonitor::handle_tally_change(const TallyUpdate& update)
 {
-    auto new_state = TallyState {
-        update.input_id,
-        update.program,
-        update.preview,
-        std::chrono::system_clock::now()
-    };
-
     // Update internal state
     {
         std::lock_guard<std::mutex> lock(tally_states_mutex_);
-        current_tally_states_[update.input_id] = new_state;
+        auto& state = current_tally_states_[update.input_id];
+        state.input_id = update.input_id;
+        state.program = update.program;
+        state.preview = update.preview;
+        state.last_updated = std::chrono::system_clock::now();
     }
 
     std::cout << "Tally update - Input " << update.input_id

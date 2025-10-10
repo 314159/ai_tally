@@ -23,7 +23,7 @@ public:
     explicit TallyMonitor(boost::asio::io_context& ioc, const Config& config);
     ~TallyMonitor() noexcept;
 
-    // Non-copyable, movable
+    // Non-copyable, non-movable
     TallyMonitor(const TallyMonitor&) = delete;
     TallyMonitor& operator=(const TallyMonitor&) = delete;
     TallyMonitor(TallyMonitor&&) = delete;
@@ -32,8 +32,7 @@ public:
     void start();
     void stop() noexcept;
 
-    // Reconnect to the ATEM switcher with current config.
-    void reconnect();
+    void reconnect(); // Reconnect to the ATEM switcher with current config.
 
     void on_ready(ReadyCallback callback);
     void on_tally_change(TallyCallback callback);

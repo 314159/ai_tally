@@ -4,9 +4,11 @@
 #include <chrono>
 #include <cstdint>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 
 namespace atem {
+struct InputInfo; // Forward declaration
 
 struct TallyUpdate {
     uint16_t input_id;
@@ -14,12 +16,14 @@ struct TallyUpdate {
     bool preview;
     bool mock = false;
 
+    std::string short_name;
     TallyUpdate() = default;
-    TallyUpdate(uint16_t id, bool prog, bool prev, bool is_mock = false)
+    TallyUpdate(uint16_t id, bool prog, bool prev, bool is_mock = false, std::string name = "")
         : input_id(id)
         , program(prog)
         , preview(prev)
         , mock(is_mock)
+        , short_name(std::move(name))
     {
     }
 
@@ -47,15 +51,19 @@ inline void tag_invoke(const boost::json::value_from_tag&, boost::json::value& j
     jv = {
         { "type", "tally_update" },
         { "input", update.input_id },
+        { "short_name", update.short_name },
         { "program", update.program },
         { "preview", update.preview },
         { "mock", update.mock },
-        { "timestamp", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() }
+        { "timestamp",
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count() }
     };
 }
 
 struct TallyState {
     uint16_t input_id;
+    std::string short_name;
     bool program;
     bool preview;
     std::chrono::system_clock::time_point last_updated;
@@ -63,6 +71,15 @@ struct TallyState {
     TallyState() = default;
     TallyState(uint16_t id, bool prog, bool prev, std::chrono::system_clock::time_point updated)
         : input_id(id)
+        , program(prog)
+        , preview(prev)
+        , last_updated(updated)
+    {
+    }
+    TallyState(
+        uint16_t id, std::string name, bool prog, bool prev, std::chrono::system_clock::time_point updated)
+        : input_id(id)
+        , short_name(std::move(name))
         , program(prog)
         , preview(prev)
         , last_updated(updated)
@@ -89,7 +106,7 @@ struct TallyState {
     // Convert to TallyUpdate for broadcasting
     TallyUpdate to_update(bool is_mock = false) const
     {
-        return TallyUpdate { input_id, program, preview, is_mock };
+        return TallyUpdate { input_id, program, preview, is_mock, short_name };
     }
 };
 

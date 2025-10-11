@@ -51,9 +51,11 @@ void TallyMonitor::start()
 
     // Pre-populate the tally states so clients get a full list on connect.
     // This is done *after* connecting so we can get the count from the device.
-    const uint16_t num_inputs = atem_connection_->get_input_count();
-    for (uint16_t i = 1; i <= num_inputs; ++i) {
-        current_tally_states_[i] = { i, false, false, std::chrono::system_clock::now() };
+    const auto inputs = atem_connection_->get_inputs();
+    for (const auto& input : inputs) {
+        current_tally_states_[input.id] = {
+            input.id, input.short_name, false, false, std::chrono::system_clock::now()
+        };
     }
 
     if (ready_callback_) {
@@ -140,7 +142,7 @@ TallyState TallyMonitor::get_tally_state(uint16_t input_id) const
     }
 
     // Return default state if not found
-    return TallyState { input_id, false, false, std::chrono::system_clock::now() };
+    return TallyState { input_id, "N/A", false, false, std::chrono::system_clock::now() };
 }
 
 std::vector<TallyState> TallyMonitor::get_all_tally_states() const
@@ -167,6 +169,11 @@ uint16_t TallyMonitor::get_input_count() const
     return atem_connection_ ? atem_connection_->get_input_count() : 0;
 }
 
+std::vector<InputInfo> TallyMonitor::get_inputs() const
+{
+    return atem_connection_ ? atem_connection_->get_inputs() : std::vector<InputInfo> {};
+}
+
 void TallyMonitor::poll_atem()
 {
     if (!running_) {
@@ -189,23 +196,21 @@ void TallyMonitor::poll_atem()
 
 void TallyMonitor::handle_tally_change(const TallyUpdate& update)
 {
-    auto new_state = TallyState {
-        update.input_id,
-        update.program,
-        update.preview,
-        std::chrono::system_clock::now()
-    };
 
-    // Update internal state
+    // Update internal state, with thread safety
     {
         std::lock_guard<std::mutex> lock(tally_states_mutex_);
-        current_tally_states_[update.input_id] = new_state;
+        auto it = current_tally_states_.find(update.input_id);
+        if (it != current_tally_states_.end()) {
+            it->second.program = update.program;
+            it->second.preview = update.preview;
+            it->second.short_name = update.short_name;
+            it->second.last_updated = std::chrono::system_clock::now();
+        } // Mutex lock is released here
     }
-
     std::cout << "Tally update - Input " << update.input_id
               << " Program: " << (update.program ? "ON" : "OFF")
               << " Preview: " << (update.preview ? "ON" : "OFF") << "\n";
-
     // Notify callback
     if (tally_callback_) {
         // Post to IO context to ensure thread safety

@@ -28,6 +28,10 @@ public:
     {
         return static_cast<uint16_t>(mock_states_.size());
     }
+    std::vector<InputInfo> get_inputs() const override;
+
+private:
+    void send_tally_update(uint16_t input_id);
 
 private:
     enum class Action { Ready, Cut, Dissolve };

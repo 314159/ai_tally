@@ -2,7 +2,11 @@
 
 namespace atem {
 
-// JSON serialization for TallyState
+TallyUpdate TallyState::to_update(bool is_mock) const
+{
+    return { input_id, short_name, program, preview, is_mock };
+}
+
 void tag_invoke(boost::json::value_from_tag, boost::json::value& jv, const TallyState& ts)
 {
     jv = {

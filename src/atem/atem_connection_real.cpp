@@ -68,6 +68,18 @@ uint16_t ATEMConnectionReal::get_input_count() const
     return 0;
 }
 
+std::vector<InputInfo> ATEMConnectionReal::get_inputs() const
+{
+    // The SDK wrapper should be responsible for populating the short_name
+    // in the TallyUpdate struct, likely by looking it up from an internal cache
+    // of input properties that it maintains.
+
+    if (connected_ && atem_device_) {
+        return atem_device_->get_inputs();
+    }
+    return {};
+}
+
 void ATEMConnectionReal::on_tally_state_changed(const TallyUpdate& update)
 {
     if (tally_callback_) {

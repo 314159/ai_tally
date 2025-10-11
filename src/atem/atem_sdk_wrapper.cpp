@@ -1,8 +1,10 @@
 #include "atem_sdk_wrapper.h"
 #include <iostream>
+#include <map>
 
 namespace atem {
 
+class ATEMDeviceImpl; // Forward declaration
 // Concrete implementation of ATEMDevice
 class ATEMDeviceImpl : public ATEMDevice {
 public:
@@ -10,6 +12,7 @@ public:
         : m_switcher(switcher)
     {
         m_switcher->AddRef();
+        cache_input_properties();
     }
 
     ~ATEMDeviceImpl() override
@@ -83,6 +86,26 @@ public:
         return count;
     }
 
+    std::vector<InputInfo> get_inputs() const override
+    {
+        std::vector<InputInfo> result;
+        result.reserve(m_input_cache.size());
+        for (const auto& pair : m_input_cache) {
+            result.push_back(pair.second);
+        }
+        return result;
+    }
+
+    InputInfo get_input_info(BMDSwitcherInputId id) const override
+    {
+        auto it = m_input_cache.find(id);
+        if (it != m_input_cache.end()) {
+            return it->second;
+        }
+        // Return a default-constructed InputInfo if not found
+        return { static_cast<uint16_t>(id), "Input " + std::to_string(id), "Input " + std::to_string(id) };
+    }
+
     void set_callback(ATEMSwitcherCallback* callback) override
     {
         if (!m_switcher)
@@ -96,7 +119,7 @@ public:
         if (m_switcher->CreateIterator(IID_IBMDSwitcherMixEffectBlockIterator, (void**)&meIterator) == S_OK) {
             IBMDSwitcherMixEffectBlock* meBlock = nullptr;
             while (meIterator->Next(&meBlock) == S_OK) {
-                auto* meCallback = new MixEffectBlockCallback(callback, meBlock);
+                auto* meCallback = new MixEffectBlockCallback(callback, meBlock, this);
                 meBlock->AddCallback(meCallback);
                 meCallback->Release(); // ME Block holds a reference
                 meBlock->Release();
@@ -106,8 +129,63 @@ public:
     }
 
 private:
+    void cache_input_properties()
+    {
+        if (!m_switcher)
+            return;
+
+        IBMDSwitcherInputIterator* inputIterator = nullptr;
+        if (m_switcher->CreateIterator(IID_IBMDSwitcherInputIterator, (void**)&inputIterator) != S_OK) {
+            return;
+        }
+
+        IBMDSwitcherInput* input = nullptr;
+        while (inputIterator->Next(&input) == S_OK) {
+            BMDSwitcherInputId inputId;
+            input->GetInputId(&inputId);
+
+            InputInfo info;
+            info.id = static_cast<uint16_t>(inputId);
+
+#ifdef _WIN32
+            BSTR shortNameBSTR = nullptr;
+            if (input->GetShortName(&shortNameBSTR) == S_OK) {
+                info.short_name = _bstr_t(shortNameBSTR, false);
+                SysFreeString(shortNameBSTR);
+            }
+            BSTR longNameBSTR = nullptr;
+            if (input->GetLongName(&longNameBSTR) == S_OK) {
+                info.long_name = _bstr_t(longNameBSTR, false);
+                SysFreeString(longNameBSTR);
+            }
+#else
+            CFStringRef shortNameCFS = nullptr;
+            if (input->GetShortName(&shortNameCFS) == S_OK) {
+                const size_t len = CFStringGetLength(shortNameCFS);
+                std::vector<char> buf(len * 4 + 1); // Max UTF8 size
+                CFStringGetCString(shortNameCFS, buf.data(), buf.size(), kCFStringEncodingUTF8);
+                info.short_name = std::string(buf.data());
+                CFRelease(shortNameCFS);
+            }
+
+            CFStringRef longNameCFS = nullptr;
+            if (input->GetLongName(&longNameCFS) == S_OK) {
+                const size_t len = CFStringGetLength(longNameCFS);
+                std::vector<char> buf(len * 4 + 1); // Max UTF8 size
+                CFStringGetCString(longNameCFS, buf.data(), buf.size(), kCFStringEncodingUTF8);
+                info.long_name = std::string(buf.data());
+                CFRelease(longNameCFS);
+            }
+#endif // _WIN32
+            m_input_cache[inputId] = info;
+            input->Release();
+        }
+        inputIterator->Release();
+    }
+
     IBMDSwitcher* m_switcher;
     SwitcherCallback* m_switcherCallback = nullptr;
+    std::map<BMDSwitcherInputId, InputInfo> m_input_cache;
 };
 
 // Concrete implementation of ATEMDiscovery
@@ -215,9 +293,6 @@ SwitcherCallback::SwitcherCallback(atem::ATEMSwitcherCallback* owner)
     , m_refCount(1) // atomic
 {
 }
-SwitcherCallback::~SwitcherCallback()
-{
-}
 
 HRESULT STDMETHODCALLTYPE SwitcherCallback::QueryInterface(REFIID iid, LPVOID* ppv)
 {
@@ -260,9 +335,10 @@ HRESULT STDMETHODCALLTYPE SwitcherCallback::Notify(BMDSwitcherEventType eventTyp
     return S_OK;
 }
 
-MixEffectBlockCallback::MixEffectBlockCallback(atem::ATEMSwitcherCallback* owner, IBMDSwitcherMixEffectBlock* meBlock)
+MixEffectBlockCallback::MixEffectBlockCallback(atem::ATEMSwitcherCallback* owner, IBMDSwitcherMixEffectBlock* meBlock, atem::ATEMDevice* device)
     : m_owner(owner)
     , m_meBlock(meBlock)
+    , m_device(device)
     , m_refCount(1) // atomic
 {
     m_meBlock->AddRef();
@@ -320,12 +396,15 @@ HRESULT STDMETHODCALLTYPE MixEffectBlockCallback::Notify(BMDSwitcherMixEffectBlo
         // so a full tally implementation requires iterating all inputs.
         // However, for a simple update, we can send updates for the new sources.
         // Note: A more robust solution would track the previous state.
+        atem::InputInfo info;
         if (eventType == bmdSwitcherMixEffectBlockEventTypeProgramInputChanged && programId != 0) {
-            m_owner->on_tally_state_changed({ (uint16_t)programId, true, false });
+            info = m_device->get_input_info(programId);
+            m_owner->on_tally_state_changed({ (uint16_t)programId, true, false, false, info.short_name });
         }
 
         if (eventType == bmdSwitcherMixEffectBlockEventTypePreviewInputChanged && previewId != 0) {
-            m_owner->on_tally_state_changed({ (uint16_t)previewId, false, true });
+            info = m_device->get_input_info(previewId);
+            m_owner->on_tally_state_changed({ (uint16_t)previewId, false, true, false, info.short_name });
         }
     }
     return S_OK;

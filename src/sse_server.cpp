@@ -1,5 +1,6 @@
 #include "sse_server.h"
 #include "config.h"
+#include "atem/iatem_connection.h"
 #include "tally_monitor.h"
 #include "tally_state.h"
 #include "version.h"
@@ -18,7 +19,7 @@ namespace atem {
 namespace {
 
     // Generates a dashboard page showing the status of all inputs.
-    std::string generate_status_page(const uint16_t num_inputs, const std::string_view server_ip, const std::string_view sdk_version)
+    std::string generate_status_page(const std::vector<InputInfo>& inputs, const std::string_view server_ip, const std::string_view sdk_version)
     {
         std::string html = R"(
 <!DOCTYPE html>
@@ -40,6 +41,7 @@ namespace {
             border-radius: 8px;
             transition: background-color 0.3s, color 0.3s;
             color: rgba(255, 255, 255, 0.8);
+            flex-direction: column;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
         .off { background-color: #34495e; }
@@ -49,6 +51,8 @@ namespace {
         .footer a { color: #3498db; text-decoration: none; }
         .footer a:hover { text-decoration: underline; }
         .nav-link { margin-bottom: 5px; font-family: sans-serif; font-size: 16px; }
+        .input-name { font-size: 0.5em; margin-top: 5px; opacity: 0.8; }
+        .input-id { font-size: 1.2em; }
         .status-line { font-size: 14px; }
     </style>
 </head>
@@ -56,8 +60,11 @@ namespace {
     <h1>Tally Status Overview</h1>
     <div class="grid">
 )";
-        for (uint16_t i = 1; i <= num_inputs; ++i) {
-            html += "<div id=\"input-" + std::to_string(i) + R"(" class="tally-cell off">)" + std::to_string(i) + "</div>\n";
+        for (const auto& input : inputs) {
+            html += "<div id=\"input-" + std::to_string(input.id) + R"(" class="tally-cell off">)"
+                + R"(<span class="input-id">)" + std::to_string(input.id) + R"(</span>)"
+                + R"(<span class="input-name">)" + input.short_name + R"(</span>)"
+                + "</div>\n";
         }
         html += R"(
     </div>
@@ -99,6 +106,10 @@ namespace {
                         cell.className = 'tally-cell preview';
                     } else {
                         cell.className = 'tally-cell off';
+                    }
+                    const nameSpan = cell.querySelector('.input-name');
+                    if (nameSpan && data.short_name) {
+                        nameSpan.textContent = data.short_name;
                     }
                 }
             });
@@ -392,7 +403,7 @@ void SseServer::setup_endpoints()
     status_resource->set_method_handler("GET", [&](const std::shared_ptr<restbed::Session> session) {
         const auto request = session->get_request();
         const auto server_ip = request->get_header("Host", "localhost");
-        const auto body = generate_status_page(config_.mock_inputs, server_ip, ATEM_SDK_VERSION);
+        const auto body = generate_status_page(monitor_.get_inputs(), server_ip, ATEM_SDK_VERSION);
         session->close(restbed::OK, body, { { "Content-Type", "text/html" }, { "Content-Length", std::to_string(body.length()) } });
     });
     service_->publish(status_resource);

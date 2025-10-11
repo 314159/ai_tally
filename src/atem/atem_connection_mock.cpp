@@ -14,19 +14,16 @@ ATEMConnectionMock::ATEMConnectionMock(boost::asio::io_context& ioc, uint16_t nu
     for (uint16_t i = 1; i <= num_inputs; ++i) {
         mock_states_.push_back({ i, false, false, std::chrono::system_clock::now() });
     }
+    // Start with input 1 on program so there's an initial state.
+    if (!mock_states_.empty()) {
+        mock_states_[0].program = true;
+        current_program_input_id_ = 1;
+    }
 }
 
 bool ATEMConnectionMock::connect(const std::string& /*ip_address*/)
 {
     std::cout << "Mock ATEM connection enabled." << std::endl;
-    // Start the sequence with input 1 on program
-    if (!mock_states_.empty()) {
-        current_program_input_id_ = 1;
-        mock_states_[0].program = true;
-        if (tally_callback_) {
-            tally_callback_(mock_states_[0].to_update(true));
-        }
-    }
     schedule_next_action(Action::Ready, 3s);
     return true;
 }

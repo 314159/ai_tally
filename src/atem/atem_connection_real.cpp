@@ -60,6 +60,14 @@ bool ATEMConnectionReal::is_mock_mode() const
     return false;
 }
 
+uint16_t ATEMConnectionReal::get_input_count() const
+{
+    if (connected_ && atem_device_) {
+        return atem_device_->get_input_count();
+    }
+    return 0;
+}
+
 void ATEMConnectionReal::on_tally_state_changed(const TallyUpdate& update)
 {
     if (tally_callback_) {

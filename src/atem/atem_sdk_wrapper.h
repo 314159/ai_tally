@@ -46,6 +46,7 @@ public:
     virtual void disconnect() = 0;
     virtual void poll() = 0;
     virtual std::string get_product_name() const = 0;
+    virtual uint16_t get_input_count() const = 0;
     virtual void set_callback(ATEMSwitcherCallback* callback) = 0;
 };
 

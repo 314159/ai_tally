@@ -65,6 +65,24 @@ public:
         return "Unknown";
     }
 
+    uint16_t get_input_count() const override
+    {
+        if (!m_switcher)
+            return 0;
+
+        uint16_t count = 0;
+        IBMDSwitcherInputIterator* inputIterator = nullptr;
+        if (m_switcher->CreateIterator(IID_IBMDSwitcherInputIterator, (void**)&inputIterator) == S_OK) {
+            IBMDSwitcherInput* input = nullptr;
+            while (inputIterator->Next(&input) == S_OK) {
+                count++;
+                input->Release();
+            }
+            inputIterator->Release();
+        }
+        return count;
+    }
+
     void set_callback(ATEMSwitcherCallback* callback) override
     {
         if (!m_switcher)

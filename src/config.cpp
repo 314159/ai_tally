@@ -33,6 +33,9 @@ void Config::load_from_file(gsl::czstring filename)
             if (ws.contains("port")) {
                 ws_port = static_cast<unsigned short>(ws.at("port").as_int64());
             }
+            if (ws.contains("max_connections")) {
+                ws_connection_limit = static_cast<int>(ws.at("max_connections").as_int64());
+            }
         }
 
         if (root.if_contains("atem") && jv.at("atem").is_object()) {

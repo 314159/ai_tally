@@ -198,6 +198,7 @@ void SseServer::start()
     settings->set_port(config_.ws_port);
     settings->set_bind_address(config_.ws_address);
     settings->set_worker_limit(std::thread::hardware_concurrency());
+    settings->set_connection_limit(config_.ws_connection_limit);
 
     std::cout << "SSE Server starting on " << config_.ws_address << ":" << config_.ws_port << std::endl;
     service_->start(settings);

@@ -10,6 +10,7 @@ struct Config {
     // WebSocket settings
     std::string ws_address = "0.0.0.0";
     unsigned short ws_port = 8080;
+    int ws_connection_limit = 100;
 
     // ATEM settings
     std::string atem_ip = "192.168.1.100";

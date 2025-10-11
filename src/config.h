@@ -16,6 +16,7 @@ struct Config {
 
     // Mock mode settings
     bool mock_enabled = false;
+    bool use_mock_automatically = true; // Fallback to mock if real connection fails
     unsigned int mock_update_interval_ms = 2000;
     uint16_t mock_inputs = 8;
 

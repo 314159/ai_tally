@@ -1,8 +1,7 @@
 #pragma once
 
+#include "atem/iatem_connection.h"
 #include "config.h" // Include the full definition of Config
-
-#include "atem_connection.h"
 #include "tally_state.h"
 #include <atomic>
 #include <boost/asio.hpp>
@@ -55,7 +54,7 @@ private:
     ReadyCallback ready_callback_;
     boost::asio::io_context& ioc_;
     const Config& config_;
-    std::unique_ptr<ATEMConnection> atem_connection_;
+    std::unique_ptr<IATEMConnection> atem_connection_;
     std::unique_ptr<boost::asio::steady_timer> monitor_timer_;
 
     ModeChangeCallback mode_change_callback_;

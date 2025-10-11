@@ -1,6 +1,10 @@
 #!/bin/bash
 
 # Cross-platform build script for ATEM Tally Server
+
+# Change to the script's directory to ensure paths are correct
+cd "$(dirname "$0")"
+
 set -e
 
 # Colors for output
@@ -44,7 +48,7 @@ OPTIONS:
 
 EXAMPLES:
     $0                  # Build in Release mode
-    $0 -d               # Build in Debug mode  
+    $0 -d               # Build in Debug mode
     $0 -c -v            # Clean build with verbose output
     $0 --debug --jobs 8 # Debug build with 8 parallel jobs
 
@@ -131,7 +135,7 @@ if [[ $CLEAN_BUILD == true && -d "$BUILD_DIR" ]]; then
 fi
 
 mkdir -p "$BUILD_DIR"
-cd "$BUILD_DIR"
+pushd "$BUILD_DIR" > /dev/null
 
 # Configure build
 print_status "Configuring build..."
@@ -153,7 +157,7 @@ if [[ "$PLATFORM" == "Windows" ]]; then
     fi
 fi
 
-eval cmake .. $CMAKE_ARGS
+cmake .. $CMAKE_ARGS
 
 if [[ $? -ne 0 ]]; then
     print_error "CMake configuration failed"
@@ -170,7 +174,7 @@ fi
 
 BUILD_ARGS="$BUILD_ARGS --parallel $JOBS"
 
-eval cmake $BUILD_ARGS
+cmake $BUILD_ARGS
 
 if [[ $? -ne 0 ]]; then
     print_error "Build failed"
@@ -180,27 +184,19 @@ fi
 print_status "Build completed successfully!"
 
 # Show output location
-if [[ "$PLATFORM" == "Windows" ]]; then
-    EXECUTABLE_PATH="$BUILD_TYPE/ATEMTallyServer.exe"
-else
-    EXECUTABLE_PATH="ATEMTallyServer"
-fi
+EXECUTABLE_PATH="ATEMTallyServer"
 
 if [[ -f "$EXECUTABLE_PATH" ]]; then
     print_status "Executable created: $PWD/$EXECUTABLE_PATH"
-    
-    # Make executable on Unix systems
-    if [[ "$PLATFORM" != "Windows" ]]; then
-        chmod +x "$EXECUTABLE_PATH"
-    fi
-    
-    print_status "To run the server: cd build && ./$EXECUTABLE_PATH"
+    print_status "To run the server from the project root: ./build/$EXECUTABLE_PATH"
 else
     print_warning "Executable not found at expected location: $EXECUTABLE_PATH"
 fi
 
 # Show next steps
 print_status "Next steps:"
-echo "  1. cd build"
-echo "  2. ./$EXECUTABLE_PATH"
-echo "  3. Open WebSocket client to ws://localhost:8080"
+echo "  1. Run the server: ./build/$EXECUTABLE_PATH"
+echo "  2. Connect an SSE client to http://localhost:8080/events"
+
+# Return to original directory
+popd > /dev/null

@@ -140,7 +140,7 @@ void TallyMonitor::poll_atem()
 
     // Schedule next poll
     monitor_timer_->expires_after(16ms); // ~60fps polling rate
-    monitor_timer_->async_wait([this](boost::system::error_code ec) {
+    monitor_timer_->async_wait([this](const boost::system::error_code& ec) {
         if (ec) {
             return; // Timer was cancelled
         }

@@ -1,7 +1,5 @@
 {
 	"files.associations": {
-		"**/src/gui_manager.cpp": "objective-cpp",
-		"*.ccpm": "cpp",
 		"*.CBL": "ACUCOBOL",
 		"*.md": "markdown",
 		"*.CPL": "ACUCOBOL",

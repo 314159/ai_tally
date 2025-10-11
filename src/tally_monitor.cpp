@@ -20,12 +20,6 @@ TallyMonitor::TallyMonitor(boost::asio::io_context& ioc, const Config& config)
     } else {
         atem_connection_ = std::make_unique<ATEMConnectionReal>();
     }
-
-    // Pre-populate the tally states so clients get a full list on connect,
-    // even if the real ATEM hasn't sent any updates yet.
-    for (uint16_t i = 1; i <= config_.mock_inputs; ++i) {
-        current_tally_states_[i] = { i, false, false, std::chrono::system_clock::now() };
-    }
 }
 
 TallyMonitor::~TallyMonitor()
@@ -54,6 +48,14 @@ void TallyMonitor::start()
             // No connection is made, the server will show a disconnected state.
         }
     }
+
+    // Pre-populate the tally states so clients get a full list on connect.
+    // This is done *after* connecting so we can get the count from the device.
+    const uint16_t num_inputs = atem_connection_->get_input_count();
+    for (uint16_t i = 1; i <= num_inputs; ++i) {
+        current_tally_states_[i] = { i, false, false, std::chrono::system_clock::now() };
+    }
+
     if (ready_callback_) {
         ready_callback_();
     }
@@ -158,6 +160,11 @@ std::vector<TallyState> TallyMonitor::get_all_tally_states() const
 bool TallyMonitor::is_mock_mode() const
 {
     return atem_connection_ ? atem_connection_->is_mock_mode() : false;
+}
+
+uint16_t TallyMonitor::get_input_count() const
+{
+    return atem_connection_ ? atem_connection_->get_input_count() : 0;
 }
 
 void TallyMonitor::poll_atem()

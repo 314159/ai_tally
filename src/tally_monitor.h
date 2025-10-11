@@ -45,6 +45,8 @@ public:
 
     bool is_mock_mode() const;
 
+    uint16_t get_input_count() const;
+
 private:
     void monitor_loop();
     void handle_tally_change(const TallyUpdate& update);

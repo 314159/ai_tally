@@ -24,6 +24,10 @@ public:
     {
         return true;
     }
+    uint16_t get_input_count() const override
+    {
+        return static_cast<uint16_t>(mock_states_.size());
+    }
 
 private:
     enum class Action { Ready, Cut, Dissolve };

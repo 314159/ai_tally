@@ -18,6 +18,7 @@ public:
     virtual void poll() = 0;
     virtual void on_tally_change(TallyCallback callback) = 0;
     virtual bool is_mock_mode() const = 0;
+    virtual uint16_t get_input_count() const = 0;
 };
 
 } // namespace atem

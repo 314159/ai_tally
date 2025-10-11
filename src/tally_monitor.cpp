@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include "atem/atem_connection_mock.h"
+#include "atem/atem_connection_real.h"
 #include "tally_monitor.h"
 #include <chrono>
 #include <iostream>
@@ -11,10 +13,13 @@ namespace atem {
 TallyMonitor::TallyMonitor(boost::asio::io_context& ioc, const Config& config)
     : ioc_(ioc)
     , config_(config)
-    , atem_connection_(std::make_unique<ATEMConnection>(config.mock_inputs))
     , monitor_timer_(std::make_unique<boost::asio::steady_timer>(ioc))
 {
-    atem_connection_->set_mock_mode(config_.mock_enabled);
+    if (config_.mock_enabled) {
+        atem_connection_ = std::make_unique<ATEMConnectionMock>(ioc_, config_.mock_inputs);
+    } else {
+        atem_connection_ = std::make_unique<ATEMConnectionReal>();
+    }
 }
 
 TallyMonitor::~TallyMonitor()
@@ -31,10 +36,17 @@ void TallyMonitor::start()
     std::cout << "Starting ATEM tally monitor...\n";
 
     // Initialize ATEM connection
-    if (!config_.mock_enabled && !atem_connection_->connect(config_.atem_ip)) {
-        std::cout << "Warning: Could not connect to ATEM switcher. Using mock data.\n";
-        atem_connection_->set_mock_mode(true);
-        notify_mode_change(true);
+    if (!atem_connection_->connect(config_.atem_ip)) {
+        if (config_.use_mock_automatically) {
+            std::cout << "Warning: Could not connect to ATEM switcher. Using mock data automatically.\n";
+            // If connection fails, replace the connection object with a mock one and connect it.
+            atem_connection_ = std::make_unique<ATEMConnectionMock>(ioc_, config_.mock_inputs);
+            atem_connection_->connect(config_.atem_ip); // This starts the mock timer
+            notify_mode_change(true);
+        } else {
+            std::cerr << "Error: Could not connect to ATEM switcher. Automatic mock fallback is disabled.\n";
+            // No connection is made, the server will show a disconnected state.
+        }
     }
     if (ready_callback_) {
         ready_callback_();
@@ -70,15 +82,28 @@ void TallyMonitor::reconnect()
     boost::asio::post(ioc_, [this]() {
         std::cout << "Reconnecting to ATEM switcher...\n";
         atem_connection_->disconnect();
+        if (config_.mock_enabled) {
+            atem_connection_ = std::make_unique<ATEMConnectionMock>(ioc_, config_.mock_inputs);
+        } else {
+            atem_connection_ = std::make_unique<ATEMConnectionReal>();
+        }
 
         // Attempt to connect with the potentially updated IP from config_
-        if (!config_.mock_enabled && !atem_connection_->connect(config_.atem_ip)) {
-            std::cout << "Warning: Could not connect to ATEM switcher. Using mock data.\n";
-            atem_connection_->set_mock_mode(true);
-            notify_mode_change(true);
+        if (!atem_connection_->connect(config_.atem_ip)) {
+            if (config_.use_mock_automatically) {
+                std::cout << "Warning: Could not reconnect to ATEM switcher. Using mock data automatically.\n";
+                // If connection fails, replace the connection object with a mock one and connect it.
+                atem_connection_ = std::make_unique<ATEMConnectionMock>(ioc_, config_.mock_inputs);
+                atem_connection_->connect(config_.atem_ip); // This starts the mock timer
+                notify_mode_change(true);
+            } else {
+                std::cerr << "Error: Could not reconnect to ATEM switcher. Automatic mock fallback is disabled.\n";
+            }
         } else {
             notify_mode_change(atem_connection_->is_mock_mode());
         }
+        // Re-register the callback on the new connection object
+        atem_connection_->on_tally_change([this](const TallyUpdate& update) { handle_tally_change(update); });
     });
 }
 

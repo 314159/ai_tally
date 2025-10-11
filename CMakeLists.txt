@@ -91,7 +91,8 @@ CPMAddPackage(
 
 # Add ATEM SDK (mock implementation for this example)
 set(ATEM_SDK_SOURCES
-    src/atem/atem_connection.cpp
+    src/atem/atem_connection_real.cpp
+    src/atem/atem_connection_mock.cpp
     src/atem/tally_state.cpp
     src/atem/atem_sdk_wrapper.cpp
 )

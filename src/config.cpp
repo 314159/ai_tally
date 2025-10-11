@@ -47,6 +47,9 @@ void Config::load_from_file(gsl::czstring filename)
             if (mm.if_contains("enabled")) {
                 mock_enabled = mm.at("enabled").as_bool();
             }
+            if (mm.if_contains("use_mock_automatically")) {
+                use_mock_automatically = mm.at("use_mock_automatically").as_bool();
+            }
             if (mm.if_contains("update_interval_ms")) {
                 mock_update_interval_ms = static_cast<unsigned int>(mm.at("update_interval_ms").as_int64());
             }

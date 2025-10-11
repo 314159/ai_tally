@@ -20,6 +20,12 @@ TallyMonitor::TallyMonitor(boost::asio::io_context& ioc, const Config& config)
     } else {
         atem_connection_ = std::make_unique<ATEMConnectionReal>();
     }
+
+    // Pre-populate the tally states so clients get a full list on connect,
+    // even if the real ATEM hasn't sent any updates yet.
+    for (uint16_t i = 1; i <= config_.mock_inputs; ++i) {
+        current_tally_states_[i] = { i, false, false, std::chrono::system_clock::now() };
+    }
 }
 
 TallyMonitor::~TallyMonitor()

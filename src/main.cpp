@@ -57,8 +57,7 @@ int main(int argc, char** argv)
             "Number of inputs to show in mock mode");
 
         auto vm = po::variables_map();
-        const auto args = std::vector<std::string>(argv, argv + argc);
-        po::store(po::command_line_parser(args).options(desc).run(), vm);
+        po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
         po::notify(vm);
 
         if (vm.count("help")) {
@@ -71,7 +70,7 @@ int main(int argc, char** argv)
         if (vm.count("config") && vm["config"].as<std::string>() != default_config_file) {
             config.load_from_file(config_file.c_str());
             // Re-apply command line arguments to override the new file's settings
-            po::store(po::command_line_parser(args).options(desc).run(), vm);
+            po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
             po::notify(vm);
         }
 

@@ -81,16 +81,16 @@ int main(int argc, char** argv)
         auto monitor = std::make_unique<atem::TallyMonitor>(io_context, config);
 
         // Create server
-        auto server = std::make_unique<atem::SseServer>(config, gsl::make_not_null(monitor.get()));
+        auto web_server = std::make_unique<atem::SseServer>(config, gsl::make_not_null(monitor.get()));
 
         // Connect tally updates to websocket broadcasts and TUI
-        monitor->on_tally_change([&server](const atem::TallyUpdate& update) {
-            server->broadcast_tally_update(update);
+        monitor->on_tally_change([&web_server](const atem::TallyUpdate& update) {
+            web_server->broadcast_tally_update(update);
         });
 
         // Connect mode changes to websocket broadcasts
-        monitor->on_mode_change([&server](bool is_mock) {
-            server->broadcast_mode_change(is_mock);
+        monitor->on_mode_change([&web_server](bool is_mock) {
+            web_server->broadcast_mode_change(is_mock);
         });
 
         // Keep the io_context running until it's explicitly stopped.
@@ -111,22 +111,22 @@ int main(int argc, char** argv)
 
         // Setup signal handling for graceful shutdown
         auto signals = boost::asio::signal_set(io_context, SIGINT, SIGTERM);
-        signals.async_wait([&server](const boost::system::error_code&, int) {
+        signals.async_wait([&web_server](const boost::system::error_code&, int) {
             std::cout << "\nSignal received, initiating shutdown...\n";
             // Stop the restbed server. This will unblock the main thread.
-            server->stop();
+            web_server->stop();
         });
 
         monitor->start();
         server_ready_future.wait();
 
         // Start the server (this will block in the main thread)
-        server->start();
+        web_server->start();
 
         // --- Shutdown ---
         std::cout << "Shutting down server..." << std::endl;
-        // The server->start() call blocks, so code here is reached after server is stopped.
-        // The signal handler calls server->stop(), which unblocks the main thread.
+        // The web_server->start() call blocks, so code here is reached after server is stopped.
+        // The signal handler calls web_server->stop(), which unblocks the main thread.
         // We stop the io_context here to terminate the monitor_thread.
         io_context.stop();
         if (monitor)

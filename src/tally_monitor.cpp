@@ -17,7 +17,7 @@ TallyMonitor::TallyMonitor(boost::asio::io_context& ioc, const Config& config)
     atem_connection_->set_mock_mode(config_.mock_enabled);
 }
 
-TallyMonitor::~TallyMonitor() noexcept
+TallyMonitor::~TallyMonitor()
 {
     stop();
 }
@@ -44,12 +44,12 @@ void TallyMonitor::start()
     atem_connection_->on_tally_change([this](const TallyUpdate& update) { handle_tally_change(update); });
 
     // Start monitoring loop
-    monitor_loop();
+    poll_atem();
 }
 
-void TallyMonitor::stop() noexcept
+void TallyMonitor::stop()
 {
-    if (!running_.exchange(false)) {
+    if (!running_.exchange(false, std::memory_order_acq_rel)) {
         return; // Already stopped
     }
 
@@ -129,22 +129,23 @@ bool TallyMonitor::is_mock_mode() const
     return atem_connection_ ? atem_connection_->is_mock_mode() : false;
 }
 
-void TallyMonitor::monitor_loop()
+void TallyMonitor::poll_atem()
 {
     if (!running_) {
         return;
     }
 
     // Poll ATEM connection for updates
-    if (atem_connection_) {
-        atem_connection_->poll();
-    }
+    atem_connection_->poll();
 
     // Schedule next poll
     monitor_timer_->expires_after(16ms); // ~60fps polling rate
-    monitor_timer_->async_wait([this](boost::system::error_code ec) {
-        if (!ec && running_) {
-            monitor_loop();
+    monitor_timer_->async_wait([this](const boost::system::error_code& ec) {
+        if (ec) {
+            return; // Timer was cancelled
+        }
+        if (running_) {
+            poll_atem();
         } });
 }
 
@@ -170,7 +171,7 @@ void TallyMonitor::handle_tally_change(const TallyUpdate& update)
     // Notify callback
     if (tally_callback_) {
         // Post to IO context to ensure thread safety
-        boost::asio::post(ioc_, [this, update]() { tally_callback_(update); });
+        tally_callback_(update);
     }
 }
 
@@ -178,7 +179,7 @@ void TallyMonitor::notify_mode_change(bool is_mock)
 {
     if (mode_change_callback_) {
         // Post to IO context to ensure thread safety
-        boost::asio::post(ioc_, [this, is_mock]() { mode_change_callback_(is_mock); });
+        mode_change_callback_(is_mock);
     }
 }
 

@@ -17,11 +17,11 @@ namespace atem {
 class TallyMonitor {
 public:
     using ReadyCallback = std::function<void()>;
-    using ModeChangeCallback = std::function<void(bool)>;
+    using ModeChangeCallback = std::function<void(bool is_mock)>;
     using TallyCallback = std::function<void(const TallyUpdate&)>;
 
     explicit TallyMonitor(boost::asio::io_context& ioc, const Config& config);
-    ~TallyMonitor() noexcept;
+    ~TallyMonitor();
 
     // Non-copyable, non-movable
     TallyMonitor(const TallyMonitor&) = delete;
@@ -30,7 +30,7 @@ public:
     TallyMonitor& operator=(TallyMonitor&&) = delete;
 
     void start();
-    void stop() noexcept;
+    void stop();
 
     void reconnect(); // Reconnect to the ATEM switcher with current config.
 
@@ -51,6 +51,7 @@ private:
     void handle_tally_change(const TallyUpdate& update);
     void notify_mode_change(bool is_mock);
 
+    void poll_atem();
     ReadyCallback ready_callback_;
     boost::asio::io_context& ioc_;
     const Config& config_;

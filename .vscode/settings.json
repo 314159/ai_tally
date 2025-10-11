@@ -107,7 +107,8 @@
 		"numbers": "cpp",
 		"scoped_allocator": "cpp",
 		"semaphore": "cpp",
-		"pointers": "cpp"
+		"pointers": "cpp",
+		"restbed": "cpp"
 	},
 	"editor.formatOnSave": true,
 	"files.trimTrailingWhitespace": true,

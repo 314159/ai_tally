@@ -1,5 +1,6 @@
 #pragma once
 
+#include "iatem_connection.h"
 #include "tally_state.h"
 #include <functional>
 #include <memory>
@@ -47,6 +48,8 @@ public:
     virtual void poll() = 0;
     virtual std::string get_product_name() const = 0;
     virtual uint16_t get_input_count() const = 0;
+    virtual std::vector<InputInfo> get_inputs() const = 0;
+    virtual InputInfo get_input_info(BMDSwitcherInputId id) const = 0;
     virtual void set_callback(ATEMSwitcherCallback* callback) = 0;
 };
 
@@ -77,7 +80,7 @@ class SwitcherCallback
 {
 public:
     SwitcherCallback(atem::ATEMSwitcherCallback* owner);
-    ~SwitcherCallback() override;
+    ~SwitcherCallback() override = default;
 
     // IUnknown methods
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID* ppv) override;
@@ -94,8 +97,8 @@ private:
 
 class MixEffectBlockCallback : public IBMDSwitcherMixEffectBlockCallback {
 public:
-    MixEffectBlockCallback(atem::ATEMSwitcherCallback* owner, IBMDSwitcherMixEffectBlock* meBlock);
-    ~MixEffectBlockCallback() override;
+    MixEffectBlockCallback(atem::ATEMSwitcherCallback* owner, IBMDSwitcherMixEffectBlock* meBlock, atem::ATEMDevice* device);
+    ~MixEffectBlockCallback() override; // NOLINT
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID* ppv) override;
     ULONG STDMETHODCALLTYPE AddRef() override;
@@ -106,5 +109,6 @@ public:
 private:
     atem::ATEMSwitcherCallback* m_owner;
     IBMDSwitcherMixEffectBlock* m_meBlock;
+    atem::ATEMDevice* m_device; // Non-owning pointer to get input names
     std::atomic<int32_t> m_refCount;
 };

@@ -12,7 +12,7 @@ ATEMConnectionMock::ATEMConnectionMock(boost::asio::io_context& ioc, uint16_t nu
         num_inputs = 1; // Avoid division by zero
     }
     for (uint16_t i = 1; i <= num_inputs; ++i) {
-        mock_states_.push_back({ i, false, false, std::chrono::system_clock::now() });
+        mock_states_.push_back({ i, "Cam " + std::to_string(i), false, false, std::chrono::system_clock::now() });
     }
     // Start with input 1 on program so there's an initial state.
     if (!mock_states_.empty()) {
@@ -45,9 +45,20 @@ void ATEMConnectionMock::on_tally_change(TallyCallback callback)
     // If we are already running, send the initial state
     if (current_program_input_id_ > 0) {
         for (const auto& state : mock_states_) {
-            tally_callback_(state.to_update(true));
+            send_tally_update(state.input_id);
         }
     }
+}
+
+std::vector<InputInfo> ATEMConnectionMock::get_inputs() const
+{
+    std::vector<InputInfo> inputs;
+    inputs.reserve(mock_states_.size());
+    for (const auto& state : mock_states_) {
+        // For mock, long name is same as short name
+        inputs.push_back({ state.input_id, state.short_name, state.short_name });
+    }
+    return inputs;
 }
 
 void ATEMConnectionMock::schedule_next_action(Action action, std::chrono::steady_clock::duration delay)
@@ -116,10 +127,8 @@ void ATEMConnectionMock::perform_action(Action action)
 void ATEMConnectionMock::set_program(uint16_t input_id, bool clear_old)
 {
     if (clear_old && current_program_input_id_ > 0) {
-        mock_states_[current_program_input_id_ - 1].program = false;
-        if (tally_callback_) {
-            tally_callback_(mock_states_[current_program_input_id_ - 1].to_update(true));
-        }
+        mock_states_[current_program_input_id_ - 1].program = false; // NOLINT
+        send_tally_update(current_program_input_id_);
     }
 
     current_program_input_id_ = input_id;
@@ -130,23 +139,26 @@ void ATEMConnectionMock::set_program(uint16_t input_id, bool clear_old)
         current_preview_input_id_ = 0; // It's no longer just in preview
     }
 
-    if (tally_callback_) {
-        tally_callback_(mock_states_[input_id - 1].to_update(true));
-    }
+    send_tally_update(input_id);
 }
 
 void ATEMConnectionMock::set_preview(uint16_t input_id)
 {
     if (current_preview_input_id_ > 0) {
         mock_states_[current_preview_input_id_ - 1].preview = false;
-        if (tally_callback_) {
-            tally_callback_(mock_states_[current_preview_input_id_ - 1].to_update(true));
-        }
+        send_tally_update(current_preview_input_id_);
     }
     current_preview_input_id_ = input_id;
     mock_states_[input_id - 1].preview = true;
-    if (tally_callback_)
-        tally_callback_(mock_states_[input_id - 1].to_update(true));
+    send_tally_update(input_id);
+}
+
+void ATEMConnectionMock::send_tally_update(uint16_t input_id)
+{
+    if (tally_callback_ && input_id > 0 && input_id <= mock_states_.size()) {
+        const auto& state = mock_states_[input_id - 1];
+        tally_callback_(state.to_update(true));
+    }
 }
 
 } // namespace atem

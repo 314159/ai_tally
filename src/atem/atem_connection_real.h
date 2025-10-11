@@ -20,6 +20,7 @@ public:
     void on_tally_change(TallyCallback callback) override;
     bool is_mock_mode() const override;
     uint16_t get_input_count() const override;
+    std::vector<InputInfo> get_inputs() const override;
 
 private:
     // ATEMSwitcherCallback implementation

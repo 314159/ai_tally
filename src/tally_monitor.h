@@ -47,6 +47,8 @@ public:
 
     uint16_t get_input_count() const;
 
+    std::vector<InputInfo> get_inputs() const;
+
 private:
     void monitor_loop();
     void handle_tally_change(const TallyUpdate& update);

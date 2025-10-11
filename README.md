@@ -1,13 +1,13 @@
-# ATEM Tally WebSocket Server
+# ATEM Tally SSE Server
 
-A cross-platform C++20 WebSocket server that monitors ATEM switcher tally states and broadcasts updates to connected clients in real-time.
+A cross-platform C++20 Server-Sent Events (SSE) server that monitors ATEM switcher tally states and broadcasts updates to connected clients in real-time.
 
 ## Features
 
 - **Cross-Platform**: Supports Windows and macOS with isolated platform-specific code
-- **Modern C++20**: Uses RAII, Rule of 7, smart pointers, and modern C++ best practices
-- **Real-Time Updates**: WebSocket server broadcasts tally changes immediately
-- **ATEM Integration**: Connects to Blackmagic ATEM switchers via UDP protocol
+- **Modern C++20**: Uses RAII, smart pointers, and modern C++ best practices
+- **Real-Time Updates**: SSE server broadcasts tally changes immediately over HTTP
+- **ATEM Integration**: Connects to Blackmagic ATEM switchers via their SDK
 - **Mock Mode**: Built-in simulation for testing without physical hardware
 - **CMake Build System**: Uses CPM for dependency management
 - **Thread-Safe**: Proper synchronization for multi-threaded operation
@@ -16,120 +16,128 @@ A cross-platform C++20 WebSocket server that monitors ATEM switcher tally states
 
 ### Core Components
 
-- **WebSocketServer**: Manages WebSocket connections and broadcasts tally updates
-- **TallyMonitor**: Monitors ATEM connection and processes tally state changes  
+- **SseServer**: Manages HTTP connections and broadcasts tally updates via Server-Sent Events
+- **TallyMonitor**: Monitors ATEM connection and processes tally state changes
 - **ATEMConnection**: Handles communication with ATEM switcher hardware
 - **Platform Layer**: Isolates Windows/macOS specific networking code
-
-### Design Patterns
-
-- **RAII**: All resources are properly managed with automatic cleanup
-- **Rule of 7**: Classes properly implement copy/move semantics or delete them
-- **Observer Pattern**: Callback-based notifications for tally state changes
-- **Dependency Injection**: Components receive dependencies through constructor
 
 ## Building
 
 ### Prerequisites
 
+- Blackmagic ATEM switcher SDK
 - CMake 3.20 or higher
 - C++20 compatible compiler:
   - Windows: Visual Studio 2019/2022 or MinGW
   - macOS: Xcode 12+ or Clang 10+
 
-### Build Steps
+### Build Scripts
+
+The project includes convenient build scripts for Windows (`build.bat`) and macOS/Linux (`build.sh`).
 
 ```bash
-# Clone repository
-git clone <repository-url>
-cd atem-tally-server
+# On macOS or Linux
+./build.sh
 
-# Create build directory
-mkdir build
-cd build
+# On Windows
+.\build.bat
+```
 
-# Configure with CMake
+For more options (like clean or debug builds), run the scripts with the `--help` flag.
+
+### Manual Build Steps
+
+If you prefer to build manually:
+
+```bash
+mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
-
-# Build
-cmake --build .
-
-# Run
-./ATEMTallyServer
+cmake --build . --config Release
 ```
 
 ### Dependencies
 
-Dependencies are automatically downloaded by CPM:
+Most dependencies are automatically downloaded by CPM:
 
-- Boost.Beast (WebSocket and HTTP)
-- Boost.Asio (Networking)
-- Boost.Json (JSON serialization)
-- Boost.System (System utilities)
+- **restbed**: For the HTTP/SSE server.
+- **Boost**: Specifically `Asio`, `System`, `Program_Options`, `JSON`, `Thread`, and `Chrono`.
+- **Microsoft GSL**: Guideline Support Library for utilities like `gsl::finally`.
+
+However, the Blackmagic ATEM Switcher SDK must be downloaded from
+[Blackmagic's developer website](https://www.blackmagicdesign.com/developer/products/atem).
+Do **NOT** add their SDK into this git archive as the license is
+incompatible.
 
 ## Usage
 
+### Command-Line Options
+
+The server can be configured via command-line arguments, which will override any settings from the config file.
+
+```bash
+./build/ATEMTallyServer --help
+```
+
 ### Basic Operation
 
-1. Start the server:
+1. Start the server from the project root directory:
 
-   ```bash
-   ./ATEMTallyServer
-   ```
+    ```bash
+    ./build/ATEMTallyServer
+    ```
 
-2. Connect WebSocket clients to `ws://localhost:8080`
+2. Connect an SSE client to the event stream at `http://localhost:8080/events`.
 
-3. The server will attempt to connect to an ATEM switcher at `192.168.1.100`
+3. The server will attempt to connect to an ATEM switcher (IP configured in `config/server_config.json` or via `--atem-ip`).
 
-4. If no ATEM is found, mock mode automatically enables for testing
+4. If no ATEM is found, mock mode automatically enables for testing.
 
-### WebSocket Protocol
+### SSE Protocol
 
-#### Messages Sent to Clients
+The server pushes events with the name `tally_update` or `mode_change`.
 
-**Welcome Message:**
+**Tally Update Event:**
 
-```json
-{
-  "type": "welcome",
-  "message": "Connected to ATEM Tally Server"
-}
+```YAML
+event: tally_update
+data: {"input_id":1,"is_preview":false,"is_program":true}
 ```
 
-**Tally Updates:**
+**Mode Change Event (real vs. mock):**
 
-```json
-{
-  "type": "tally_update",
-  "input": 1,
-  "program": true,
-  "preview": false,
-  "timestamp": 1640995200000
-}
+```YAML
+event: mode_change
+data: {"is_mock":true}
 ```
 
-#### Client Testing
+### Client Testing
 
-You can test with a simple WebSocket client:
+You can test with a simple HTML/JavaScript client:
 
-```javascript
-const ws = new WebSocket('ws://localhost:8080');
+```html
+<script>
+  const evtSource = new EventSource("http://localhost:8080/events");
 
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Tally Update:', data);
-  
-  if (data.type === 'tally_update') {
-    console.log(`Input ${data.input}: Program=${data.program}, Preview=${data.preview}`);
-  }
-};
+  evtSource.addEventListener("tally_update", (event) => {
+    const data = JSON.parse(event.data);
+    console.log('Tally Update:', data);
+  });
+
+  evtSource.onerror = (err) => {
+    console.error("EventSource failed:", err);
+  };
+</script>
 ```
+
+- Boost.Asio (Networking)
+- Boost.Json (JSON serialization)
+- Boost.System (System utilities)
 
 ## Configuration
 
 Edit `config/server_config.json` to customize:
 
-- **WebSocket settings**: Port, bind address, connection limits
+- **Web server settings**: Port, bind address, connection limits
 - **ATEM connection**: IP address, port, timeouts
 - **Mock mode**: Enable simulation, update intervals
 - **Logging**: Output levels and destinations
@@ -157,52 +165,29 @@ When no ATEM switcher is available, the server automatically enables mock mode:
 - Perfect for development and testing
 - Can be manually enabled in configuration
 
-## ATEM Protocol
-
-The server implements a subset of the Blackmagic ATEM protocol:
-
-- **Connection**: UDP socket on port 9910
-- **Packet Format**: Binary protocol with command parsing
-- **Tally Commands**: Processes `TlIn` (Tally Input) commands
-- **Real Implementation**: Currently uses mock data (see `atem_connection.cpp`)
-
 ## Development
-
-### Adding New Platforms
-
-1. Create `src/platform/newplatform_platform.cpp`
-2. Implement the `platform_interface.h` functions
-3. Add platform detection to `CMakeLists.txt`
-4. Add platform-specific libraries if needed
-
-### Extending Functionality
-
-- **New Message Types**: Add to WebSocket protocol in `websocket_server.cpp`
-- **Additional ATEM Data**: Extend `TallyState` structure
-- **Configuration**: Add options to `server_config.json`
-- **Logging**: Implement file-based logging system
 
 ## Troubleshooting
 
 ### Common Issues
 
-**"Failed to bind acceptor"**
+#### "Failed to bind acceptor"
 
 - Port 8080 might be in use
 - Try a different port in configuration
 - Check firewall settings
 
-**"Could not connect to ATEM switcher"**
+#### "Could not connect to ATEM switcher"
 
 - Verify ATEM IP address is correct
 - Ensure ATEM is on same network
 - Check that ATEM allows external connections
 - Server will automatically use mock mode
 
-**Build Errors**
+#### Build Errors
 
 - Ensure C++20 compiler support
-- Check CMake version (3.20+ required)  
+- Check CMake version (3.20+ required)
 - Verify internet connection for dependency downloads
 
 ### Debug Mode
@@ -214,8 +199,3 @@ cmake .. -DCMAKE_BUILD_TYPE=Debug
 cmake --build .
 ```
 
-## License
-
-This project demonstrates modern C++ techniques and cross-platform development patterns. The ATEM protocol implementation is simplified for educational purposes.
-
-For production use with real ATEM switchers, you would need to implement the complete Blackmagic ATEM SDK protocol or use their official SDK.

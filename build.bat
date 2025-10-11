@@ -2,6 +2,9 @@
 REM Cross-platform build script for ATEM Tally Server (Windows)
 setlocal EnableDelayedExpansion
 
+REM Change to the script's directory to ensure paths are correct
+cd /d "%~dp0"
+
 REM Default values
 set BUILD_TYPE=Release
 set CLEAN_BUILD=false
@@ -95,11 +98,11 @@ if "%CLEAN_BUILD%"=="true" (
 )
 
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
-cd "%BUILD_DIR%"
+pushd "%BUILD_DIR%"
 
 REM Configure build
 echo [INFO] Configuring build...
-set CMAKE_ARGS=-DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+set "CMAKE_ARGS=-DCMAKE_BUILD_TYPE=%BUILD_TYPE%"
 
 if "%VERBOSE%"=="true" (
     set CMAKE_ARGS=%CMAKE_ARGS% -DCMAKE_VERBOSE_MAKEFILE=ON
@@ -109,10 +112,10 @@ REM Check for Visual Studio
 where cl >nul 2>nul
 if errorlevel 1 (
     echo [INFO] Using MinGW compiler
-    set CMAKE_ARGS=%CMAKE_ARGS% -G "MinGW Makefiles"
+    set "CMAKE_ARGS=%CMAKE_ARGS% -G \"MinGW Makefiles\""
 ) else (
     echo [INFO] Using Visual Studio compiler
-    set CMAKE_ARGS=%CMAKE_ARGS% -G "Visual Studio 17 2022" -A x64
+    set "CMAKE_ARGS=%CMAKE_ARGS% -G \"Visual Studio 17 2022\" -A x64"
 )
 
 cmake .. %CMAKE_ARGS%
@@ -123,13 +126,13 @@ if errorlevel 1 (
 
 REM Build
 echo [INFO] Building project...
-set BUILD_ARGS=--build . --config %BUILD_TYPE%
+set "BUILD_ARGS=--build . --config %BUILD_TYPE%"
 
 if "%VERBOSE%"=="true" (
     set BUILD_ARGS=%BUILD_ARGS% --verbose
 )
 
-set BUILD_ARGS=%BUILD_ARGS% --parallel %JOBS%
+set "BUILD_ARGS=%BUILD_ARGS% --parallel %JOBS%"
 
 cmake %BUILD_ARGS%
 if errorlevel 1 (
@@ -140,21 +143,25 @@ if errorlevel 1 (
 echo [INFO] Build completed successfully!
 
 REM Show output location
-set EXECUTABLE_PATH=%BUILD_TYPE%\ATEMTallyServer.exe
+set "EXECUTABLE_PATH=%BUILD_TYPE%\ATEMTallyServer.exe"
+set "MINGW_EXECUTABLE_PATH=ATEMTallyServer.exe"
+
+set FINAL_EXE_PATH=%EXECUTABLE_PATH%
+if not exist "%EXECUTABLE_PATH%" (
+    set FINAL_EXE_PATH=%MINGW_EXECUTABLE_PATH%
+)
+
 if exist "%EXECUTABLE_PATH%" (
-    echo [INFO] Executable created: %CD%\%EXECUTABLE_PATH%
-    echo [INFO] To run the server: cd build ^&^& %EXECUTABLE_PATH%
+    echo [INFO] Executable created: %CD%\%FINAL_EXE_PATH%
+    echo [INFO] To run the server from the project root: build\%FINAL_EXE_PATH%
 ) else (
-    echo [WARN] Executable not found at expected location: %EXECUTABLE_PATH%
+    echo [WARN] Executable not found at expected locations.
 )
 
 REM Show next steps
 echo [INFO] Next steps:
-echo   1. cd build
-echo   2. %EXECUTABLE_PATH%
-echo   3. Open WebSocket client to ws://localhost:8080
-
-goto :eof
+echo   1. Run the server: build\%FINAL_EXE_PATH%
+echo   2. Connect an SSE client to http://localhost:8080/events
 
 :show_help
 echo Usage: %0 [OPTIONS]
@@ -170,8 +177,10 @@ echo     -j, --jobs N        Number of parallel jobs (default: auto-detected^)
 echo.
 echo EXAMPLES:
 echo     %0                  # Build in Release mode
-echo     %0 -d               # Build in Debug mode  
+echo     %0 -d               # Build in Debug mode
 echo     %0 -c -v            # Clean build with verbose output
 echo     %0 --debug --jobs 8 # Debug build with 8 parallel jobs
 echo.
+
+popd
 exit /b 0

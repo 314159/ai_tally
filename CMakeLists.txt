@@ -40,7 +40,7 @@ endif()
 if(WIN32)
     set(PLATFORM_SOURCES src/platform/windows_platform.cpp)
     # Add Ole32.lib for COM
-    set(PLATFORM_LIBS ws2_32 wsock32 ole32)
+    set(PLATFORM_LIBS ws2_32 wsock32 ole32 oleaut32)
     set(ATEM_SDK_INCLUDE_DIR "${BMD_SDK_DIR}/Windows/include")
     set(ATEM_SDK_DISPATCH_SRC "")
 elseif(APPLE)
@@ -60,10 +60,25 @@ CPMAddPackage(
     NAME Boost
     VERSION 1.89.0
     GITHUB_REPOSITORY boostorg/boost
-    GIT_TAG boost-1.89.0 # Or the specific tag for 1.89.0
+    GIT_TAG boost-1.89.0
     OPTIONS
         "BOOST_ENABLE_CMAKE ON"
-        "BOOST_INCLUDE_LIBRARIES beast\\\;asio\\\;system\\\;thread\\\;chrono\\\;json\\\;program_options"
+        "BOOST_INCLUDE_LIBRARIES asio\\\;system\\\;thread\\\;chrono\\\;json\\\;program_options"
+)
+
+# Find or fetch restbed and apply patches using a CMake script
+CPMAddPackage(
+    NAME restbed
+    GITHUB_REPOSITORY Corvusoft/restbed
+    GIT_TAG 4.8
+    PATCHES
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/restbed-cmake-version.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/restbed-boost-1.81.patch"
+    OPTIONS
+        "BUILD_TESTS OFF"
+        "BUILD_EXAMPLES OFF"
+        "BUILD_SHARED OFF"
+        "BUILD_SSL=ON"
 )
 
 # Find or fetch Microsoft's GSL (Guideline Support Library)
@@ -85,7 +100,7 @@ set(ATEM_SDK_SOURCES
 add_executable(${PROJECT_NAME}
     src/config.cpp
     src/main.cpp
-    src/websocket_server.cpp
+    src/sse_server.cpp
     src/tally_monitor.cpp
     ${ATEM_SDK_SOURCES}
     ${ATEM_SDK_DISPATCH_SRC}
@@ -128,6 +143,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/platform
     src/atem
     ${ATEM_SDK_INCLUDE_DIR}
+    ${restbed_SOURCE_DIR}/source
 )
 
 # Make sure the version_generator target runs before the main executable is built.
@@ -135,7 +151,6 @@ add_dependencies(${PROJECT_NAME} version_generator)
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    Boost::beast
     Boost::asio
     Boost::system
     Boost::thread
@@ -143,6 +158,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Boost::json
     Boost::program_options
     GSL
+    restbed-static # Use the target name defined by restbed's CMakeLists.txt
     ${PLATFORM_LIBS}
 )
 

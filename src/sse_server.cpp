@@ -1,6 +1,7 @@
 #include "sse_server.h"
 #include "config.h"
 #include "tally_monitor.h"
+#include "tally_state.h"
 #include "version.h"
 #include <boost/json.hpp>
 #include <chrono>
@@ -15,6 +16,143 @@
 
 namespace atem {
 namespace {
+
+    // Generates a dashboard page showing the status of all inputs.
+    std::string generate_status_page(const uint16_t num_inputs, const std::string_view server_ip, const std::string_view sdk_version)
+    {
+        std::string html = R"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ATEM Tally Status</title>
+    <style>
+        body { font-family: sans-serif; background-color: #2c3e50; color: #ecf0f1; text-align: center; padding-top: 20px; margin: 0; }
+        h1 { color: #3498db; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        .tally-cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            font-size: 2em;
+            font-weight: bold;
+            border-radius: 8px;
+            transition: background-color 0.3s, color 0.3s;
+            color: rgba(255, 255, 255, 0.8);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        .off { background-color: #34495e; }
+        .preview { background-color: #009900; color: #fff; }
+        .program { background-color: #FF0000; color: #fff; }
+        .footer { position: fixed; bottom: 10px; left: 10px; font-size: 14px; color: #FFFFFF; font-family: monospace; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
+        .footer a { color: #3498db; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        .nav-link { margin-bottom: 5px; font-family: sans-serif; font-size: 16px; }
+        .status-line { font-size: 14px; }
+    </style>
+</head>
+<body>
+    <h1>Tally Status Overview</h1>
+    <div class="grid">
+)";
+        for (uint16_t i = 1; i <= num_inputs; ++i) {
+            html += "<div id=\"input-" + std::to_string(i) + R"(" class="tally-cell off">)" + std::to_string(i) + "</div>\n";
+        }
+        html += R"(
+    </div>
+    <div class="footer">
+        <div class="nav-link"><a href="/">Switch to Single Input View</a></div>
+        <div class="status-line">
+            <span id="server-details"></span> | Status: <span id="connection-status">Connecting...</span>
+        </div>
+    </div>
+    <script>
+        const serverVersion = ")"
+            + std::string(version::GIT_VERSION) + R"(";
+        const sdkVersion = ")"
+            + std::string(sdk_version) + R"(";
+
+        let isConnected = false;
+        let currentMockStatus = false;
+
+        function connect() {
+            console.log('Attempting to connect to SSE endpoint...');
+            const eventSource = new EventSource('/events');
+
+            eventSource.onopen = () => {
+                console.log('SSE connection opened.');
+            };
+
+            eventSource.addEventListener('tally_update', (event) => {
+                if (!isConnected) {
+                    isConnected = true;
+                    document.getElementById('connection-status').textContent = 'Connected';
+                    console.log('Client is now marked as connected.');
+                }
+                const data = JSON.parse(event.data);
+                const cell = document.getElementById('input-' + data.input);
+                if (cell) {
+                    if (data.program) {
+                        cell.className = 'tally-cell program';
+                    } else if (data.preview) {
+                        cell.className = 'tally-cell preview';
+                    } else {
+                        cell.className = 'tally-cell off';
+                    }
+                }
+            });
+
+            eventSource.addEventListener('mode_change', (event) => {
+                const data = JSON.parse(event.data);
+                if (data.mock !== currentMockStatus) {
+                    console.log('Mock status changed, reloading page.');
+                    location.reload();
+                }
+                currentMockStatus = data.mock;
+            });
+
+            eventSource.addEventListener('server_info', (event) => {
+                const data = JSON.parse(event.data);
+                if (data.server_version !== serverVersion) {
+                    console.log('Server version mismatch, reloading page.');
+                    location.reload();
+                }
+            });
+
+            eventSource.onerror = (err) => {
+                console.error('SSE connection error:', err);
+                isConnected = false;
+                document.getElementById('connection-status').textContent = 'Disconnected';
+                // Reset all tally cells to 'off' state to prevent showing stale status
+                const cells = document.querySelectorAll('.tally-cell');
+                cells.forEach(cell => {
+                    cell.className = 'tally-cell off';
+                });
+                eventSource.close();
+                setTimeout(connect, 1000); // Try to reconnect after 1 second
+            };
+        }
+
+        const serverDetails = `Server ${serverVersion} (SDK ${sdkVersion}) @ )"
+            + std::string(server_ip) + R"(`;
+        document.getElementById('server-details').textContent = serverDetails;
+
+        // Initial state from initial tally updates
+        document.addEventListener('DOMContentLoaded', () => {
+            // We can infer initial mock status from the first tally update
+            eventSource.addEventListener('tally_update', (e) => {
+                currentMockStatus = JSON.parse(e.data).mock;
+            }, { once: true });
+        });
+
+        connect();
+    </script>
+</body>
+</html>
+)";
+        return html;
+    }
 
     // Generates an HTML page listing all tally inputs based on config.
     std::string generate_index_page(const uint16_t num_inputs)
@@ -31,6 +169,9 @@ namespace {
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; max-width: 800px; margin: 50px auto; }
         a { display: block; padding: 40px 20px; background-color: #34495e; color: #ecf0f1; text-decoration: none; font-size: 1.5em; border-radius: 8px; transition: background-color 0.3s; }
         a:hover { background-color: #46627f; }
+        .footer { margin-top: 40px; }
+        .footer a { display: inline-block; padding: 10px 20px; font-size: 1em; background-color: #3498db; }
+        .footer a:hover { background-color: #2980b9; }
     </style>
 </head>
 <body>
@@ -41,6 +182,9 @@ namespace {
             html += "<a href=\"/tally/" + std::to_string(i) + "\">Input " + std::to_string(i) + "</a>\n";
         }
         html += R"(
+    </div>
+    <div class="footer">
+        <a href="/status">Show All Inputs (Status Overview)</a>
     </div>
 </body>
 </html>
@@ -241,6 +385,17 @@ void SseServer::setup_endpoints()
         const auto body = generate_index_page(config_.mock_inputs);
         session->close(restbed::OK, body, { { "Content-Type", "text/html" }, { "Content-Length", std::to_string(body.length()) } }); });
     service_->publish(index_resource);
+
+    // --- Status Page (All Inputs) ---
+    auto status_resource = std::make_shared<restbed::Resource>();
+    status_resource->set_path("/status");
+    status_resource->set_method_handler("GET", [&](const std::shared_ptr<restbed::Session> session) {
+        const auto request = session->get_request();
+        const auto server_ip = request->get_header("Host", "localhost");
+        const auto body = generate_status_page(config_.mock_inputs, server_ip, ATEM_SDK_VERSION);
+        session->close(restbed::OK, body, { { "Content-Type", "text/html" }, { "Content-Length", std::to_string(body.length()) } });
+    });
+    service_->publish(status_resource);
 
     // --- Tally Page ---
     auto tally_resource = std::make_shared<restbed::Resource>();

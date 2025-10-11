@@ -49,7 +49,7 @@ void TallyMonitor::start()
 
 void TallyMonitor::stop()
 {
-    if (!running_.exchange(false)) {
+    if (!running_.exchange(false, std::memory_order_acq_rel)) {
         return; // Already stopped
     }
 
